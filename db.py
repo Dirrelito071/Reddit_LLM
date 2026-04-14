@@ -23,6 +23,8 @@ def init_db():
             score INTEGER,
             upvote_ratio REAL,
             num_comments INTEGER,
+            previous_score INTEGER,
+            previous_num_comments INTEGER,
             url TEXT NOT NULL,
             created_utc REAL,
             status TEXT DEFAULT 'new',
@@ -32,6 +34,17 @@ def init_db():
             json_data TEXT NOT NULL
         )
     """)
+    
+    # Migration: Add columns if they don't exist (for existing databases)
+    try:
+        cursor.execute("ALTER TABLE posts ADD COLUMN previous_score INTEGER")
+    except:
+        pass  # Column already exists
+    
+    try:
+        cursor.execute("ALTER TABLE posts ADD COLUMN previous_num_comments INTEGER")
+    except:
+        pass  # Column already exists
     
     conn.commit()
     conn.close()
@@ -82,16 +95,26 @@ def store_or_update_post(post_data, json_payload):
         if post_exists(post_id):
             # Post exists - check if content changed
             if content_changed(post_id, post_data['score'], post_data['num_comments']):
-                # Content changed - update
+                # Get current values to store as previous
+                cursor.execute("""
+                    SELECT score, num_comments FROM posts WHERE post_id = ?
+                """, (post_id,))
+                prev_result = cursor.fetchone()
+                prev_score, prev_num_comments = prev_result if prev_result else (None, None)
+                
+                # Content changed - update with previous values stored
                 cursor.execute("""
                     UPDATE posts 
                     SET score = ?, upvote_ratio = ?, num_comments = ?, 
+                        previous_score = ?, previous_num_comments = ?,
                         status = 'refreshed', updated_at = CURRENT_TIMESTAMP, json_data = ?
                     WHERE post_id = ?
                 """, (
                     post_data['score'],
                     post_data['upvote_ratio'],
                     post_data['num_comments'],
+                    prev_score,
+                    prev_num_comments,
                     json.dumps(json_payload),
                     post_id
                 ))
@@ -103,11 +126,12 @@ def store_or_update_post(post_data, json_payload):
                 conn.close()
                 return "unchanged"
         else:
-            # New post - insert
+            # New post - insert (no previous values)
             cursor.execute("""
                 INSERT INTO posts 
-                (post_id, subreddit, title, author, score, upvote_ratio, num_comments, url, created_utc, status, json_data)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?)
+                (post_id, subreddit, title, author, score, upvote_ratio, num_comments, 
+                 previous_score, previous_num_comments, url, created_utc, status, json_data)
+                VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, 'new', ?)
             """, (
                 post_id,
                 post_data['subreddit'],

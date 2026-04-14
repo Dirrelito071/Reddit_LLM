@@ -4,9 +4,8 @@ Configuration for Reddit LLM system.
 
 # Subreddits to monitor
 SUBREDDITS = [
-    "python",
-    "programming",
-    "learnprogramming",
+    "DigitalAudioPlayer",
+    "longboarding",
 ]
 
 # Reddit RSS settings
