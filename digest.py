@@ -37,7 +37,7 @@ for (subreddit,) in subreddits:
         continue
     
     for rank, (post_id, title, score, num_comments, status, previous_score, summary) in enumerate(posts, 1):
-        # Determine engagement direction indicator (primary)
+        # Determine engagement direction indicator
         if status == "new":
             indicator = "→"  # New post
         elif previous_score is not None:
@@ -50,10 +50,6 @@ for (subreddit,) in subreddits:
                 indicator = "→"  # No change
         else:
             indicator = "→"  # No previous value to compare
-        
-        # Add summarized marker if post has a summary (secondary indicator)
-        if summary:
-            indicator += "✓"
         
         short_title = title[:60] + "..." if len(title) > 60 else title
         print(f"{rank}. {indicator} {short_title}")
@@ -71,5 +67,5 @@ for (subreddit,) in subreddits:
 conn.close()
 
 print("=" * 80)
-print("Legend: → = No change  |  ↑ = Engagement up  |  ↓ = Engagement down  |  ✓ = Summarized")
+print("Legend: → = No change  |  ↑ = Engagement up  |  ↓ = Engagement down")
 print("=" * 80)
