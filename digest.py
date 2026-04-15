@@ -37,27 +37,26 @@ for (subreddit,) in subreddits:
         continue
     
     for rank, (post_id, title, score, num_comments, status, previous_score, summary) in enumerate(posts, 1):
-        # Determine engagement direction
+        # Determine engagement direction indicator (primary)
         if status == "new":
-            arrow = "→"  # New post (neutral)
-        elif status == "refreshed":
-            # Compare previous to current score
-            if previous_score is not None:
-                if score > previous_score:
-                    arrow = "↑"  # Score went up
-                elif score < previous_score:
-                    arrow = "↓"  # Score went down
-                else:
-                    arrow = "→"  # No change (shouldn't happen if refreshed)
+            indicator = "→"  # New post
+        elif previous_score is not None:
+            # Compare previous to current score for engagement direction
+            if score > previous_score:
+                indicator = "↑"  # Score went up
+            elif score < previous_score:
+                indicator = "↓"  # Score went down
             else:
-                arrow = "↑"  # No previous value, assume up
-        elif status == "summarized":
-            arrow = "✓"  # Summarized
+                indicator = "→"  # No change
         else:
-            arrow = "•"  # Unknown status
+            indicator = "→"  # No previous value to compare
+        
+        # Add summarized marker if post has a summary (secondary indicator)
+        if summary:
+            indicator += "✓"
         
         short_title = title[:60] + "..." if len(title) > 60 else title
-        print(f"{rank}. {arrow} {short_title}")
+        print(f"{rank}. {indicator} {short_title}")
         print(f"   Score: {score} | Comments: {num_comments}")
         
         if summary:
@@ -72,5 +71,5 @@ for (subreddit,) in subreddits:
 conn.close()
 
 print("=" * 80)
-print("Legend: → = New  |  ↑ = Engagement up  |  ↓ = Engagement down  |  ✓ = Summarized")
+print("Legend: → = No change  |  ↑ = Engagement up  |  ↓ = Engagement down  |  ✓ = Summarized")
 print("=" * 80)
