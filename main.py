@@ -7,11 +7,26 @@ import config
 import requests
 import feedparser
 import db
+import sys
 
-print("=" * 80)
-print("REDDIT POST COLLECTOR")
-print("=" * 80)
-print(f"Subreddits: {', '.join(config.SUBREDDITS)}")
+# Check for --subreddit parameter
+target_subreddit = None
+if len(sys.argv) > 2 and sys.argv[1] == "--subreddit":
+    target_subreddit = sys.argv[2]
+    subreddits_to_process = [target_subreddit]
+else:
+    subreddits_to_process = config.SUBREDDITS
+
+if target_subreddit:
+    print("=" * 80)
+    print(f"REDDIT POST COLLECTOR - r/{target_subreddit}")
+    print("=" * 80)
+else:
+    print("=" * 80)
+    print("REDDIT POST COLLECTOR")
+    print("=" * 80)
+    print(f"Subreddits: {', '.join(config.SUBREDDITS)}")
+
 print()
 
 # Initialize database
@@ -19,7 +34,7 @@ db.init_db()
 print("✓ Database initialized\n")
 
 # Process each subreddit
-for subreddit in config.SUBREDDITS:
+for subreddit in subreddits_to_process:
     print(f"{'=' * 80}")
     print(f"Processing r/{subreddit}...")
     print(f"{'=' * 80}")
@@ -108,9 +123,17 @@ for subreddit in config.SUBREDDITS:
     print()
 
 # Final stats
-print("=" * 80)
-print("COLLECTION COMPLETE")
-print("=" * 80)
-total_posts = db.get_post_count()
-print(f"✓ Total posts in database: {total_posts}\n")
+if target_subreddit:
+    # Per-subreddit stats
+    sr_count = db.get_post_count(target_subreddit)
+    print("=" * 80)
+    print(f"COLLECTION COMPLETE - r/{target_subreddit}")
+    print("=" * 80)
+    print(f"✓ Posts for r/{target_subreddit}: {sr_count}\n")
+else:
+    total_posts = db.get_post_count()
+    print("=" * 80)
+    print("COLLECTION COMPLETE")
+    print("=" * 80)
+    print(f"✓ Total posts in database: {total_posts}\n")
 
