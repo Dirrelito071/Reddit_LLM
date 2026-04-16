@@ -5,6 +5,7 @@ HTTP server that runs collection/summarization pipeline and serves live progress
 """
 
 import json
+import logging
 import sqlite3
 import subprocess
 import sys
@@ -16,6 +17,14 @@ from urllib.parse import urlparse
 
 import config
 import db
+
+# Configure logging to see output in Docker
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    stream=sys.stdout
+)
+logger = logging.getLogger(__name__)
 
 DB_PATH = "reddit_posts.db"
 PORT = 8000
@@ -106,7 +115,7 @@ class NewsHandler(BaseHTTPRequestHandler):
                         "last_updated": None
                     }
         except Exception as e:
-            print(f"Error querying status: {e}")
+            logger.error(f"Error querying status: {e}")
             status = {sr: {"phase": "error", "pct": 0, "label": "Error", "last_updated": None} for sr in config.SUBREDDITS}
         
         # Add running flag
@@ -146,7 +155,7 @@ class NewsHandler(BaseHTTPRequestHandler):
             
             conn.close()
         except Exception as e:
-            print(f"Error querying news: {e}")
+            logger.error(f"Error querying news: {e}")
             news = {sr: [] for sr in config.SUBREDDITS}
         
         self.send_json(news)
@@ -175,7 +184,7 @@ class NewsHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(content)
         except Exception as e:
-            print(f"Error sending JSON: {e}")
+            logger.error(f"Error sending JSON: {e}")
             self.send_error(500)
 
 
@@ -184,9 +193,9 @@ def run_pipeline():
     global pipeline_running
     
     pipeline_running = True
-    print("\n" + "=" * 80)
-    print("PIPELINE STARTED - Sequential per-subreddit processing")
-    print("=" * 80 + "\n")
+    logger.info("\n" + "=" * 80)
+    logger.info("PIPELINE STARTED - Sequential per-subreddit processing")
+    logger.info("=" * 80 + "\n")
     
     try:
         # Reset progress table
@@ -194,49 +203,49 @@ def run_pipeline():
         
         # Process each subreddit sequentially
         for subreddit in config.SUBREDDITS:
-            print(f"\n{'=' * 80}")
-            print(f"SUBREDDIT: r/{subreddit}")
-            print(f"{'=' * 80}\n")
+            logger.info(f"\n{'=' * 80}")
+            logger.info(f"SUBREDDIT: r/{subreddit}")
+            logger.info(f"{'=' * 80}\n")
             
             sr_start = time.time()
             
             # COLLECT
-            print(f"[1/2] Collecting posts from r/{subreddit}...")
-            print("-" * 80)
+            logger.info(f"[1/2] Collecting posts from r/{subreddit}...")
+            logger.info("-" * 80)
             try:
                 result = subprocess.run([sys.executable, "main.py", "--subreddit", subreddit], check=True)
                 if result.returncode != 0:
-                    print(f"\n✗ Error collecting from r/{subreddit}")
+                    logger.error(f"\nError collecting from r/{subreddit}")
             except subprocess.CalledProcessError as e:
-                print(f"\n✗ Error collecting from r/{subreddit}: {e}")
+                logger.error(f"\nError collecting from r/{subreddit}: {e}")
             except FileNotFoundError:
-                print(f"\n✗ main.py not found")
+                logger.error(f"\nmain.py not found")
             
             collect_time = time.time() - sr_start
             
             # SUMMARIZE
-            print(f"\n[2/2] Summarizing top 5 posts from r/{subreddit}...")
-            print("-" * 80)
+            logger.info(f"\n[2/2] Summarizing top 5 posts from r/{subreddit}...")
+            logger.info("-" * 80)
             try:
                 result = subprocess.run([sys.executable, "summarize.py", "--subreddit", subreddit], check=True)
                 if result.returncode != 0:
-                    print(f"\n✗ Error summarizing r/{subreddit}")
+                    logger.error(f"\nError summarizing r/{subreddit}")
             except subprocess.CalledProcessError as e:
-                print(f"\n✗ Error summarizing r/{subreddit}: {e}")
+                logger.error(f"\nError summarizing r/{subreddit}: {e}")
             except FileNotFoundError:
-                print(f"\n✗ summarize.py not found")
+                logger.error(f"\nsummarize.py not found")
             
             sr_total = time.time() - sr_start
             summarize_time = sr_total - collect_time
             
-            print(f"\n✓ r/{subreddit} complete (collected: {collect_time:.1f}s, summarized: {summarize_time:.1f}s)")
+            logger.info(f"\nr/{subreddit} complete (collected: {collect_time:.1f}s, summarized: {summarize_time:.1f}s)")
         
-        print("\n" + "=" * 80)
-        print("✓ PIPELINE COMPLETE")
-        print("=" * 80 + "\n")
+        logger.info("\n" + "=" * 80)
+        logger.info("PIPELINE COMPLETE")
+        logger.info("=" * 80 + "\n")
     
     except Exception as e:
-        print(f"\n✗ Pipeline error: {e}\n")
+        logger.error(f"\nPipeline error: {e}\n")
     
     finally:
         pipeline_running = False
@@ -247,19 +256,19 @@ if __name__ == "__main__":
     db.init_db()
     db.init_progress()
     
-    print("=" * 80)
-    print("NEWS DIGEST SERVER - Reddit Edition with Pipeline Orchestration")
-    print("=" * 80)
-    print(f"Starting server on http://localhost:{PORT}")
-    print(f"Subreddits: {', '.join(config.SUBREDDITS)}")
-    print("\nOpen your browser and navigate to:")
-    print(f"  http://localhost:{PORT}")
-    print("\nClick 'Start Pipeline' button to begin collection and summarization")
-    print("Press Ctrl+C to stop")
-    print("=" * 80 + "\n")
+    logger.info("=" * 80)
+    logger.info("NEWS DIGEST SERVER - Reddit Edition with Pipeline Orchestration")
+    logger.info("=" * 80)
+    logger.info(f"Starting server on http://localhost:{PORT}")
+    logger.info(f"Subreddits: {', '.join(config.SUBREDDITS)}")
+    logger.info("\nOpen your browser and navigate to:")
+    logger.info(f"  http://localhost:{PORT}")
+    logger.info("\nClick 'Start Pipeline' button to begin collection and summarization")
+    logger.info("Press Ctrl+C to stop")
+    logger.info("=" * 80 + "\n")
     
     try:
         with HTTPServer(("0.0.0.0", PORT), NewsHandler) as httpd:
             httpd.serve_forever()
     except KeyboardInterrupt:
-        print("\n\nServer stopped.")
+        logger.info("\n\nServer stopped.")
