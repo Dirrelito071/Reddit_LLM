@@ -259,7 +259,7 @@ if __name__ == "__main__":
     print("=" * 80 + "\n")
     
     try:
-        with HTTPServer(("127.0.0.1", PORT), NewsHandler) as httpd:
+        with HTTPServer(("0.0.0.0", PORT), NewsHandler) as httpd:
             httpd.serve_forever()
     except KeyboardInterrupt:
         print("\n\nServer stopped.")
