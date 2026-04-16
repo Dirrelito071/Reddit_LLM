@@ -31,6 +31,7 @@ print()
 
 # Initialize database
 db.init_db()
+db.init_progress()
 print("✓ Database initialized\n")
 
 # Process each subreddit
@@ -38,6 +39,9 @@ for subreddit in subreddits_to_process:
     print(f"{'=' * 80}")
     print(f"Processing r/{subreddit}...")
     print(f"{'=' * 80}")
+    
+    # Update progress: collecting phase starting
+    db.update_progress(subreddit, "collecting", 0, 0)
     
     # Fetch RSS feed
     url = config.REDDIT_RSS_URL.format(subreddit=subreddit)
@@ -97,6 +101,10 @@ for subreddit in subreddits_to_process:
                 
                 # Store or update in database
                 result = db.store_or_update_post(store_data, api_data)
+                
+                # Update progress
+                pct = int((i / 25) * 100)
+                db.update_progress(subreddit, "collecting", pct, i)
                 
                 if result == "new":
                     print(f"  [{i}/25] ✓ New: {title} ({store_data['score']} pts)")

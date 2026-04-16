@@ -27,14 +27,12 @@
 
   .phase-collecting .bar   { background: #3b82f6; }
   .phase-collecting .badge { background: #dbeafe; color: #1d4ed8; }
-  .phase-processing .bar   { background: #f59e0b; }
-  .phase-processing .badge { background: #fef3c7; color: #b45309; }
+  .phase-summarizing .bar   { background: #f59e0b; }
+  .phase-summarizing .badge { background: #fef3c7; color: #b45309; }
   .phase-ready      .bar   { background: #10b981; }
   .phase-ready      .badge { background: #d1fae5; color: #065f46; }
 
-  .tab.active[data-cat=tech]    { border-color: #1a7abf; background: #eff8ff; }
-  .tab.active[data-cat=science] { border-color: #1e7e34; background: #f0faf0; }
-  .tab.active[data-cat=world]   { border-color: #c47a00; background: #fffbf0; }
+  .tab.active { border-color: #3b82f6; background: #dbeafe; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2); }
 
   /* Main */
   main { max-width: 660px; margin: 0 auto; padding: 16px 12px 32px; }
@@ -48,6 +46,8 @@
   [data-pane=science] .card { border-color: #1e7e34; }
   [data-pane=world]   .card { border-color: #c47a00; }
   .card h3 { font-size: 0.95rem; margin-bottom: 6px; line-height: 1.35; }
+  .card h3 a { color: #1a7abf; text-decoration: none; transition: all 0.2s; }
+  .card h3 a:hover { color: #0e5ba8; text-decoration: underline; }
   .card p  { font-size: 0.82rem; color: #444; line-height: 1.55; }
   .card .meta { font-size: 0.7rem; color: #888; margin-bottom: 6px; }
   a.card { display: block; text-decoration: none; color: inherit; }
@@ -60,43 +60,40 @@
 
   #err { display:none; background:#fef2f2; color:#991b1b;
          padding:8px 16px; font-size:0.8rem; font-weight:600; text-align:center; }
+
+  #pipeline-btn { margin-left: auto; padding: 8px 16px; background: #3b82f6; color: #fff;
+                  border: none; border-radius: 6px; cursor: pointer; font-weight: 600;
+                  font-size: 0.85rem; transition: background 0.2s; }
+  #pipeline-btn:hover:not(:disabled) { background: #2563eb; }
+  #pipeline-btn:disabled { background: #9ca3af; cursor: not-allowed; }
 </style>
 </head>
 <body>
 
 <header>
-  <h1>Daily Digest</h1>
-  <p id="hdate"></p>
+  <div style="display: flex; align-items: center; gap: 16px;">
+    <div>
+      <h1>Daily Digest</h1>
+      <p id="hdate"></p>
+    </div>
+    <button id="pipeline-btn">Start Pipeline</button>
+  </div>
 </header>
 
 <div id="err"></div>
 
-<div class="tabs">
-  <button class="tab active" data-cat="tech"    onclick="show('tech',this)">
-    <div class="name">💻 Technology</div>
-    <div class="info"><span id="lbl-tech">—</span><span class="badge" id="bdg-tech">Idle</span></div>
-    <div class="track"><div class="bar" id="bar-tech"></div></div>
-  </button>
-  <button class="tab" data-cat="science" onclick="show('science',this)">
-    <div class="name">🔬 Science</div>
-    <div class="info"><span id="lbl-science">—</span><span class="badge" id="bdg-science">Idle</span></div>
-    <div class="track"><div class="bar" id="bar-science"></div></div>
-  </button>
-  <button class="tab" data-cat="world"   onclick="show('world',this)">
-    <div class="name">🌍 World</div>
-    <div class="info"><span id="lbl-world">—</span><span class="badge" id="bdg-world">Idle</span></div>
-    <div class="track"><div class="bar" id="bar-world"></div></div>
-  </button>
+<div class="tabs" id="tabs-container">
+  <!-- Dynamically generated from /api/status -->
 </div>
 
 <main>
-  <div class="pane on" data-pane="tech"    id="pane-tech"></div>
-  <div class="pane"    data-pane="science" id="pane-science"></div>
-  <div class="pane"    data-pane="world"   id="pane-world"></div>
+  <div id="panes-container">
+    <!-- Dynamically generated panes -->
+  </div>
 </main>
 
 <script>
-  const CATS = ['tech','science','world'];
+  const CATS = [];  // Will be populated from API
   const prev = {};
 
   document.getElementById('hdate').textContent =
@@ -120,23 +117,96 @@
   function renderNews(cat, articles) {
     document.getElementById('pane-' + cat).innerHTML = articles.length
       ? articles.map(a => {
-          const tag = a.link && a.link !== '#' ? `a href="${esc(a.link)}" target="_blank" rel="noopener"` : 'div';
-          const end = tag.split(' ')[0];
-          return `<${tag} class="card"><div class="meta">${cat}</div><h3>${esc(a.title)}</h3><p>${esc(a.summary)}</p></${end}>`;
+          // Calculate engagement indicator
+          let indicator = '→';
+          if (a.previous_score !== null && a.previous_score !== undefined) {
+            if (a.score > a.previous_score) {
+              indicator = '↑';
+            } else if (a.score < a.previous_score) {
+              indicator = '↓';
+            }
+          }
+          
+          const score = a.score || 0;
+          const comments = a.num_comments || 0;
+          const titleLink = a.link && a.link !== '#' 
+            ? `<a href="${esc(a.link)}" target="_blank" rel="noopener">${indicator} ${esc(a.title)}</a>`
+            : `${indicator} ${esc(a.title)}`;
+          
+          return `<div class="card">
+            <div class="meta">${cat}</div>
+            <h3>${titleLink}</h3>
+            <p>${esc(a.summary)}</p>
+            <div class="meta" style="margin-top:8px">Score: ${score} | Comments: ${comments}</div>
+          </div>`;
         }).join('')
       : '<p style="color:#888;padding:8px 0;font-size:.85rem">Waiting for first fetch…</p>';
   }
 
+  function initializeTabs(subreddits) {
+    const tabsContainer = document.getElementById('tabs-container');
+    const panesContainer = document.getElementById('panes-container');
+    
+    tabsContainer.innerHTML = '';
+    panesContainer.innerHTML = '';
+    
+    subreddits.forEach((sr, idx) => {
+      CATS.push(sr);
+      
+      // Create tab button
+      const tab = document.createElement('button');
+      tab.className = idx === 0 ? 'tab active' : 'tab';
+      tab.setAttribute('data-cat', sr);
+      tab.onclick = () => show(sr, tab);
+      tab.innerHTML = `
+        <div class="name">${esc(sr)}</div>
+        <div class="info"><span id="lbl-${sr}">—</span><span class="badge" id="bdg-${sr}">Idle</span></div>
+        <div class="track"><div class="bar" id="bar-${sr}"></div></div>
+        <div style="font-size: 0.65rem; color: #666; margin-top: 4px;" id="ts-${sr}"></div>
+      `;
+      tabsContainer.appendChild(tab);
+      
+      // Create pane
+      const pane = document.createElement('div');
+      pane.className = idx === 0 ? 'pane on' : 'pane';
+      pane.setAttribute('data-pane', sr);
+      pane.id = 'pane-' + sr;
+      pane.innerHTML = skeleton();
+      panesContainer.appendChild(pane);
+    });
+  }
+
   function applyStatus(data) {
+    const btn = document.getElementById('pipeline-btn');
+    const isRunning = data.running;
+    
+    // Update button state
+    btn.disabled = isRunning;
+    btn.textContent = isRunning ? 'Pipeline Running...' : 'Start Pipeline';
+    
     document.getElementById('err').style.display = 'none';
-    CATS.forEach(cat => {
-      const s = data[cat];
-      const tab = document.querySelector(`.tab[data-cat=${cat}]`);
+    
+    // Extract subreddits data
+    const subreddits = data.subreddits || {};
+    
+    Object.keys(subreddits).forEach(cat => {
+      const s = subreddits[cat];
+      const tab = document.querySelector(`.tab[data-cat="${cat}"]`);
+      if (!tab) return;
+      
       tab.className = `tab${tab.classList.contains('active')?' active':''} phase-${s.phase}`;
-      tab.dataset.cat = cat;
       document.getElementById('bar-' + cat).style.width = s.pct + '%';
       document.getElementById('lbl-' + cat).textContent = s.label;
       document.getElementById('bdg-' + cat).textContent = s.phase;
+      
+      // Format and display last_updated timestamp
+      if (s.last_updated) {
+        const ts = new Date(s.last_updated);
+        const timeStr = ts.toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit', second: '2-digit'});
+        document.getElementById('ts-' + cat).textContent = `Updated ${timeStr}`;
+      } else {
+        document.getElementById('ts-' + cat).textContent = '';
+      }
 
       if (s.phase === 'ready' && prev[cat] !== 'ready') {
         fetch('/api/news').then(r => r.json()).then(d => renderNews(cat, d[cat]));
@@ -145,16 +215,43 @@
     });
   }
 
-  // Show skeletons while waiting
-  CATS.forEach(c => document.getElementById('pane-' + c).innerHTML = skeleton());
+  // Button click handler
+  document.getElementById('pipeline-btn').addEventListener('click', async () => {
+    try {
+      const response = await fetch('/api/run', { method: 'POST' });
+      const data = await response.json();
+      if (data.started) {
+        console.log('Pipeline started');
+      } else if (data.error) {
+        alert('Error: ' + data.error);
+      }
+    } catch (err) {
+      alert('Failed to start pipeline: ' + err);
+    }
+  });
 
+  // Initialize tabs from first status fetch
+  fetch('/api/status')
+    .then(r => r.json())
+    .then(data => {
+      const subreddits = Object.keys(data.subreddits || data);
+      initializeTabs(subreddits);
+      applyStatus(data);
+    })
+    .catch(() => {
+      const e = document.getElementById('err');
+      e.style.display = 'block';
+      e.textContent = '⚠ python3 news-server2.py is not running';
+    });
+
+  // Poll for status updates
   setInterval(() =>
     fetch('/api/status')
       .then(r => r.json()).then(applyStatus)
       .catch(() => {
         const e = document.getElementById('err');
         e.style.display = 'block';
-        e.textContent = '⚠ python3 news_server.py is not running';
+        e.textContent = '⚠ python3 news-server2.py is not running';
       })
   , 600);
 </script>

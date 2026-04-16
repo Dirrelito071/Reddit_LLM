@@ -8,11 +8,11 @@ Create a trending posts digest/newsflow by:
 4. Building a digest of trending/important discussions
 
 ## Current Phase
-**Phase 3 (COMPLETE):** LLM summarization with digest ✅ FULLY IMPLEMENTED & TESTED
+**Phase 4 (IN PROGRESS):** Web dashboard with real-time progress tracking
 - Phase 1 (COMPLETE): Simple architecture with RSS + API
 - Phase 2 (COMPLETE): Database with smart deduplication
 - Phase 3 (COMPLETE): LLM processing for 5-sentence summaries
-- Phase 4 (IN PROGRESS): Digest/newsflow generation with engagement tracking
+- Phase 4 (IN PROGRESS): Web dashboard with live progress + timestamps
 
 ## System Architecture
 
@@ -306,17 +306,14 @@ Output: N processed, M already_summarized, E errors
 ```
 /Users/kvirre/Documents/Martin/Programmering/Reddit_LLM/
 ├── config.py                 # Configuration (subreddits, API keys, timeouts)
-├── db.py                     # Database layer (smart dedup, CRUD)
+├── db.py                     # Database layer (smart dedup, CRUD + progress tracking)
 ├── main.py                   # Post collector (RSS → API → DB)
-├── llm_processor.py          # LLM integration (individual post processing)
 ├── summarize.py              # Batch summarization (top 5 per subreddit)
-├── digest.py                 # Display feed (top 5 with summaries + engagement)
-├── run.py                    # Orchestration (collect → summarize → display)
-├── reddit_posts.db           # SQLite database (50 posts)
+├── news-server2.py           # HTTP server with pipeline orchestration
+├── news-digest.html          # Web dashboard (real-time progress + articles)
+├── reddit_posts.db           # SQLite database (posts + progress table)
 ├── requirements.txt          # Python dependencies
-├── Dockerfile               # (Not in use)
-├── docker-compose.yml       # (Not in use)
-└── CLAUDE.MD                # This file
+└── CLAUDE.MD                 # This file
 ```
 
 ## How to Run
@@ -324,17 +321,22 @@ Output: N processed, M already_summarized, E errors
 ```bash
 cd /Users/kvirre/Documents/Martin/Programmering/Reddit_LLM
 
-# Full pipeline (recommended)
-python3 run.py
+# Start web dashboard server
+python3 news-server2.py
 
-# Or individual steps
-python3 main.py       # Collect posts
-python3 summarize.py  # Summarize top 5
-python3 digest.py     # Display feed
-
-# View feed again anytime (no LLM re-processing)
-python3 digest.py
+# Then in browser:
+# - Open http://localhost:8000
+# - Click "Start Pipeline" button
+# - Watch real-time progress bars
+# - Articles appear as summarization completes
 ```
+
+### What You Get:
+- **Real-time progress bars** for collection (0/25 → 25/25) and summarization (1/5 → 5/5)
+- **Dynamic tabs** for each subreddit with engagement indicators (↑↓→)
+- **Last updated timestamps** showing when subreddits completed (24-hour format)
+- **Smart fetching** - articles load on demand, not constant polling
+- **Smooth animations** - progress updates every 600ms
 
 ## Output Examples
 

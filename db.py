@@ -166,3 +166,85 @@ def get_post_count(subreddit=None):
     count = cursor.fetchone()[0]
     conn.close()
     return count
+
+def init_progress():
+    """Initialize progress tracking table"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS progress (
+            subreddit TEXT PRIMARY KEY,
+            phase TEXT DEFAULT 'idle',
+            pct INTEGER DEFAULT 0,
+            total_posts INTEGER DEFAULT 0,
+            last_updated TIMESTAMP DEFAULT NULL
+        )
+    """)
+    
+    # Migration: Add last_updated column if it doesn't exist
+    try:
+        cursor.execute("ALTER TABLE progress ADD COLUMN last_updated TIMESTAMP DEFAULT NULL")
+    except:
+        pass  # Column already exists
+    
+    conn.commit()
+    conn.close()
+
+
+def reset_progress():
+    """Clear all progress records"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    cursor.execute("DELETE FROM progress")
+    
+    conn.commit()
+    conn.close()
+
+
+def update_progress(subreddit, phase, pct, total_posts=0):
+    """Update progress for a subreddit"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    # If phase is 'ready', record the timestamp
+    if phase == "ready":
+        cursor.execute("""
+            INSERT OR REPLACE INTO progress (subreddit, phase, pct, total_posts, last_updated)
+            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+        """, (subreddit, phase, pct, total_posts))
+    else:
+        # Get current last_updated to preserve existing timestamp
+        cursor.execute("SELECT last_updated FROM progress WHERE subreddit = ?", (subreddit,))
+        result = cursor.fetchone()
+        last_updated = result[0] if result else None
+        
+        cursor.execute("""
+            INSERT OR REPLACE INTO progress (subreddit, phase, pct, total_posts, last_updated)
+            VALUES (?, ?, ?, ?, ?)
+        """, (subreddit, phase, pct, total_posts, last_updated))
+    
+    conn.commit()
+    conn.close()
+
+
+def get_progress():
+    """Get progress for all subreddits"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT subreddit, phase, pct, total_posts, last_updated FROM progress ORDER BY subreddit")
+    rows = cursor.fetchall()
+    conn.close()
+    
+    progress = {}
+    for subreddit, phase, pct, total_posts, last_updated in rows:
+        progress[subreddit] = {
+            "phase": phase,
+            "pct": pct,
+            "total_posts": total_posts,
+            "last_updated": last_updated
+        }
+    
+    return progress
