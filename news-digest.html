@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Daily Digest</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #f0f2f5; }
+
+  header { background: #1a1a2e; color: #fff; padding: 16px; position: sticky; top: 0; z-index: 9; }
+  header h1 { font-size: 1.3rem; }
+  header p  { font-size: 0.75rem; color: #a0a8c0; margin-top: 2px; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 10px; padding: 12px 16px; background: #fff;
+          border-bottom: 1px solid #e2e6ea; overflow-x: auto; }
+  .tab  { flex-shrink: 0; min-width: 140px; padding: 10px 12px 8px;
+          border-radius: 12px; border: 1.5px solid transparent;
+          background: #f6f8fa; cursor: pointer; text-align: left; }
+  .tab .name  { font-size: 0.85rem; font-weight: 700; margin-bottom: 6px; }
+  .tab .info  { display: flex; justify-content: space-between;
+                font-size: 0.68rem; margin-bottom: 5px; }
+  .tab .badge { font-weight: 700; padding: 1px 6px; border-radius: 6px; }
+  .track { height: 5px; border-radius: 99px; background: #e5e7eb; overflow: hidden; margin-bottom: 4px; }
+  .bar   { height: 100%; border-radius: 99px; width: 0%; transition: width 0.3s linear; }
+
+  .phase-collecting .bar   { background: #3b82f6; }
+  .phase-collecting .badge { background: #dbeafe; color: #1d4ed8; }
+  .phase-processing .bar   { background: #f59e0b; }
+  .phase-processing .badge { background: #fef3c7; color: #b45309; }
+  .phase-ready      .bar   { background: #10b981; }
+  .phase-ready      .badge { background: #d1fae5; color: #065f46; }
+
+  .tab.active[data-cat=tech]    { border-color: #1a7abf; background: #eff8ff; }
+  .tab.active[data-cat=science] { border-color: #1e7e34; background: #f0faf0; }
+  .tab.active[data-cat=world]   { border-color: #c47a00; background: #fffbf0; }
+
+  /* Main */
+  main { max-width: 660px; margin: 0 auto; padding: 16px 12px 32px; }
+  .pane { display: none; }
+  .pane.on { display: block; }
+
+  /* Cards */
+  .card { background: #fff; border-radius: 12px; padding: 14px; margin-bottom: 10px;
+          box-shadow: 0 1px 4px rgba(0,0,0,0.07); border-left: 4px solid; }
+  [data-pane=tech]    .card { border-color: #1a7abf; }
+  [data-pane=science] .card { border-color: #1e7e34; }
+  [data-pane=world]   .card { border-color: #c47a00; }
+  .card h3 { font-size: 0.95rem; margin-bottom: 6px; line-height: 1.35; }
+  .card p  { font-size: 0.82rem; color: #444; line-height: 1.55; }
+  .card .meta { font-size: 0.7rem; color: #888; margin-bottom: 6px; }
+  a.card { display: block; text-decoration: none; color: inherit; }
+
+  /* Skeleton */
+  .sk { background: linear-gradient(90deg,#e5e7eb 25%,#f3f4f6 50%,#e5e7eb 75%);
+        background-size: 200% 100%; animation: sh 1.3s infinite;
+        border-radius: 6px; height: 13px; margin: 6px 0; }
+  @keyframes sh { to { background-position: -200% 0; } }
+
+  #err { display:none; background:#fef2f2; color:#991b1b;
+         padding:8px 16px; font-size:0.8rem; font-weight:600; text-align:center; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Daily Digest</h1>
+  <p id="hdate"></p>
+</header>
+
+<div id="err"></div>
+
+<div class="tabs">
+  <button class="tab active" data-cat="tech"    onclick="show('tech',this)">
+    <div class="name">💻 Technology</div>
+    <div class="info"><span id="lbl-tech">—</span><span class="badge" id="bdg-tech">Idle</span></div>
+    <div class="track"><div class="bar" id="bar-tech"></div></div>
+  </button>
+  <button class="tab" data-cat="science" onclick="show('science',this)">
+    <div class="name">🔬 Science</div>
+    <div class="info"><span id="lbl-science">—</span><span class="badge" id="bdg-science">Idle</span></div>
+    <div class="track"><div class="bar" id="bar-science"></div></div>
+  </button>
+  <button class="tab" data-cat="world"   onclick="show('world',this)">
+    <div class="name">🌍 World</div>
+    <div class="info"><span id="lbl-world">—</span><span class="badge" id="bdg-world">Idle</span></div>
+    <div class="track"><div class="bar" id="bar-world"></div></div>
+  </button>
+</div>
+
+<main>
+  <div class="pane on" data-pane="tech"    id="pane-tech"></div>
+  <div class="pane"    data-pane="science" id="pane-science"></div>
+  <div class="pane"    data-pane="world"   id="pane-world"></div>
+</main>
+
+<script>
+  const CATS = ['tech','science','world'];
+  const prev = {};
+
+  document.getElementById('hdate').textContent =
+    new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
+
+  function show(cat, btn) {
+    document.querySelectorAll('.pane').forEach(p => p.classList.remove('on'));
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.getElementById('pane-' + cat).classList.add('on');
+    btn.classList.add('active');
+  }
+
+  function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function skeleton() {
+    return '<div class="card"><div class="sk" style="width:70%"></div><div class="sk"></div><div class="sk" style="width:85%"></div></div>'.repeat(5);
+  }
+
+  function renderNews(cat, articles) {
+    document.getElementById('pane-' + cat).innerHTML = articles.length
+      ? articles.map(a => {
+          const tag = a.link && a.link !== '#' ? `a href="${esc(a.link)}" target="_blank" rel="noopener"` : 'div';
+          const end = tag.split(' ')[0];
+          return `<${tag} class="card"><div class="meta">${cat}</div><h3>${esc(a.title)}</h3><p>${esc(a.summary)}</p></${end}>`;
+        }).join('')
+      : '<p style="color:#888;padding:8px 0;font-size:.85rem">Waiting for first fetch…</p>';
+  }
+
+  function applyStatus(data) {
+    document.getElementById('err').style.display = 'none';
+    CATS.forEach(cat => {
+      const s = data[cat];
+      const tab = document.querySelector(`.tab[data-cat=${cat}]`);
+      tab.className = `tab${tab.classList.contains('active')?' active':''} phase-${s.phase}`;
+      tab.dataset.cat = cat;
+      document.getElementById('bar-' + cat).style.width = s.pct + '%';
+      document.getElementById('lbl-' + cat).textContent = s.label;
+      document.getElementById('bdg-' + cat).textContent = s.phase;
+
+      if (s.phase === 'ready' && prev[cat] !== 'ready') {
+        fetch('/api/news').then(r => r.json()).then(d => renderNews(cat, d[cat]));
+      }
+      prev[cat] = s.phase;
+    });
+  }
+
+  // Show skeletons while waiting
+  CATS.forEach(c => document.getElementById('pane-' + c).innerHTML = skeleton());
+
+  setInterval(() =>
+    fetch('/api/status')
+      .then(r => r.json()).then(applyStatus)
+      .catch(() => {
+        const e = document.getElementById('err');
+        e.style.display = 'block';
+        e.textContent = '⚠ python3 news_server.py is not running';
+      })
+  , 600);
+</script>
+</body>
+</html>
