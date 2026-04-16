@@ -1,8 +1,9 @@
 version: '3.8'
 
 services:
-  api:
+  news-server:
     build: .
+    container_name: reddit-news-server
     ports:
       - "8000:8000"
     environment:
@@ -10,10 +11,12 @@ services:
       - MODEL=mistral:7b-instruct
       - LOG_LEVEL=INFO
     volumes:
+      - ./reddit_posts.db:/app/reddit_posts.db
       - ./data:/app/data
       - ./logs:/app/logs
     networks:
       - reddit-llm
+    restart: unless-stopped
 
 networks:
   reddit-llm:

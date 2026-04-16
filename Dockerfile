@@ -9,5 +9,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application
 COPY . .
 
-# Run application
-CMD ["python", "main.py"]
+# Expose port for web server
+EXPOSE 8000
+
+# Run web server with pipeline orchestration
+CMD ["python", "news-server2.py"]
