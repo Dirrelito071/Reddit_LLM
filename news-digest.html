@@ -559,6 +559,14 @@
       showSettingsSuccess('Settings saved successfully!');
       setTimeout(() => {
         closeSettings();
+        // Reload tabs with new subreddits immediately
+        fetch('/api/status')
+          .then(r => r.json())
+          .then(data => {
+            const subreddits = Object.keys(data.status || {});
+            initializeTabs(subreddits);
+            applyStatus(data);
+          });
       }, 1000);
     } catch (error) {
       console.error('Error saving settings:', error);

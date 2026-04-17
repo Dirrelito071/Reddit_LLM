@@ -48,11 +48,13 @@ print(f"Using LLM question: {custom_question[:70]}...\n")
 for (subreddit,) in subreddits:
     print(f"r/{subreddit}:")
     
-    # Get top 5 unsummarized posts by score
+    # Get top 5 posts that need summarization (new or refreshed only)
+    # Skip 'unchanged' posts (no content change = no need to re-summarize)
+    # Skip 'summarized' posts (already processed)
     cursor.execute("""
         SELECT post_id, title, status
         FROM posts
-        WHERE subreddit = ? AND status != 'summarized'
+        WHERE subreddit = ? AND status IN ('new', 'refreshed')
         ORDER BY score DESC
         LIMIT 5
     """, (subreddit,))
