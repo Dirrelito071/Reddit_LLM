@@ -70,8 +70,7 @@ log_success "Local changes pushed to GitHub"
 # Step 0b: Sync database file to server (not in git)
 log_info "Step 0b: Syncing database file to server..."
 if [ -f "reddit_posts.db" ]; then
-    scp reddit_posts.db "$SERVER_HOST:$SERVER_PATH/Reddit_LLM/reddit_posts.db" 2>/dev/null || log_warning "Database sync skipped (file may not exist on server)"
-    log_success "Database file synced"
+    scp reddit_posts.db "Server@server:/Users/server/mediastack/Reddit_LLM/reddit_posts.db" 2>/dev/null && log_success "Database file synced" || log_warning "Database sync skipped"
 else
     log_warning "reddit_posts.db not found locally, skipping sync"
 fi
