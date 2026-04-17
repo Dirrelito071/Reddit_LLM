@@ -288,11 +288,12 @@
     
     document.getElementById('err').style.display = 'none';
     
-    // Extract status data (new format) or fallback to old format
-    const subreddits = data.status || data.subreddits || {};
+    // data.status is the object with per-subreddit status
+    // Use that, don't fall back to data.subreddits (which is an array)
+    const statusMap = data.status || {};
     
-    Object.keys(subreddits).forEach(cat => {
-      const s = subreddits[cat];
+    Object.keys(statusMap).forEach(cat => {
+      const s = statusMap[cat];
       const tab = document.querySelector(`.tab[data-cat="${cat}"]`);
       if (!tab) return;
       
