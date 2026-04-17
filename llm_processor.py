@@ -9,7 +9,7 @@ import config
 
 DB_PATH = "reddit_posts.db"
 
-# The question to ask about each post
+# The question to ask about each post (default, can be overridden)
 QUESTION = """What are the key insights from this post, the poster's intention, and the following discussion? Summarize it in 5 sentences."""
 
 
@@ -65,12 +65,13 @@ def call_ollama(question, api_data):
         return None
 
 
-def process_post(post_id):
+def process_post(post_id, custom_question=None):
     """
     Process a specific post through LLM
     
     Args:
         post_id: Reddit post ID to process
+        custom_question: Optional custom question (if None, uses default QUESTION)
     
     Returns:
         True - Successfully processed
@@ -109,9 +110,12 @@ def process_post(post_id):
             conn.close()
             return False
         
+        # Use custom question if provided, otherwise use default
+        question_to_use = custom_question if custom_question else QUESTION
+        
         # Call LLM
         print(f"  Calling LLM for: {title[:60]}...")
-        summary = call_ollama(QUESTION, context)
+        summary = call_ollama(question_to_use, context)
         
         if not summary:
             conn.close()

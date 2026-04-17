@@ -56,6 +56,10 @@ class NewsHandler(BaseHTTPRequestHandler):
         
         if path == "/api/run":
             self.run_pipeline_handler()
+        elif path == "/api/settings/subreddits":
+            self.handle_subreddit_settings()
+        elif path == "/api/settings/question":
+            self.handle_question_settings()
         else:
             self.send_error(404)
     
@@ -77,8 +81,9 @@ class NewsHandler(BaseHTTPRequestHandler):
         
         try:
             progress = db.get_progress()
+            subreddits = db.get_subreddits()  # Load from DB (user settings or defaults)
             
-            for subreddit in config.SUBREDDITS:
+            for subreddit in subreddits:
                 if subreddit in progress:
                     p = progress[subreddit]
                     phase = p["phase"]
@@ -116,10 +121,18 @@ class NewsHandler(BaseHTTPRequestHandler):
                     }
         except Exception as e:
             logger.error(f"Error querying status: {e}")
-            status = {sr: {"phase": "error", "pct": 0, "label": "Error", "last_updated": None} for sr in config.SUBREDDITS}
+            subreddits = db.get_subreddits()
+            status = {sr: {"phase": "error", "pct": 0, "label": "Error", "last_updated": None} for sr in subreddits}
         
-        # Add running flag
-        response = {"running": pipeline_running, "subreddits": status}
+        # Add running flag, subreddits list, and LLM question
+        subreddits = db.get_subreddits()
+        llm_question = db.get_llm_question()
+        response = {
+            "running": pipeline_running,
+            "subreddits": subreddits,
+            "llm_question": llm_question,
+            "status": status
+        }
         self.send_json(response)
     
     def serve_news(self):
@@ -129,8 +142,9 @@ class NewsHandler(BaseHTTPRequestHandler):
         try:
             conn = sqlite3.connect(DB_PATH)
             cursor = conn.cursor()
+            subreddits = db.get_subreddits()  # Load from DB (user settings or defaults)
             
-            for subreddit in config.SUBREDDITS:
+            for subreddit in subreddits:
                 # Get top 5 posts with summaries and engagement data
                 cursor.execute("""
                     SELECT title, summary, url, COALESCE(score, 0), COALESCE(num_comments, 0), previous_score
@@ -156,7 +170,8 @@ class NewsHandler(BaseHTTPRequestHandler):
             conn.close()
         except Exception as e:
             logger.error(f"Error querying news: {e}")
-            news = {sr: [] for sr in config.SUBREDDITS}
+            subreddits = db.get_subreddits()
+            news = {sr: [] for sr in subreddits}
         
         self.send_json(news)
     
@@ -173,6 +188,60 @@ class NewsHandler(BaseHTTPRequestHandler):
         pipeline_thread.start()
         
         self.send_json({"started": True})
+    
+    def handle_subreddit_settings(self):
+        """Handle POST /api/settings/subreddits - update subreddit list"""
+        try:
+            content_length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(content_length).decode('utf-8')
+            data = json.loads(body)
+            
+            subreddits = data.get("subreddits", [])
+            
+            # Validate: at least 1 subreddit required
+            if not subreddits or len(subreddits) == 0:
+                self.send_json({"error": "At least 1 subreddit required"})
+                return
+            
+            # Validate: all entries are strings
+            if not all(isinstance(sr, str) and sr.strip() for sr in subreddits):
+                self.send_json({"error": "Invalid subreddit names"})
+                return
+            
+            # Store in database
+            subreddits = [sr.strip() for sr in subreddits]
+            if db.set_subreddits(subreddits):
+                logger.info(f"Subreddits updated: {subreddits}")
+                self.send_json({"success": True, "subreddits": subreddits})
+            else:
+                self.send_json({"error": "Failed to save subreddits"})
+        except Exception as e:
+            logger.error(f"Error handling subreddit settings: {e}")
+            self.send_json({"error": str(e)})
+    
+    def handle_question_settings(self):
+        """Handle POST /api/settings/question - update LLM question"""
+        try:
+            content_length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(content_length).decode('utf-8')
+            data = json.loads(body)
+            
+            question = data.get("question", "").strip()
+            
+            # Validate: question cannot be empty
+            if not question:
+                self.send_json({"error": "Question cannot be empty"})
+                return
+            
+            # Store in database
+            if db.set_llm_question(question):
+                logger.info(f"LLM question updated")
+                self.send_json({"success": True, "question": question})
+            else:
+                self.send_json({"error": "Failed to save question"})
+        except Exception as e:
+            logger.error(f"Error handling question settings: {e}")
+            self.send_json({"error": str(e)})
     
     def send_json(self, data):
         """Send JSON response"""
@@ -201,8 +270,11 @@ def run_pipeline():
         # Reset progress table
         db.reset_progress()
         
+        # Load subreddits from DB (user settings or defaults)
+        subreddits = db.get_subreddits()
+        
         # Process each subreddit sequentially
-        for subreddit in config.SUBREDDITS:
+        for subreddit in subreddits:
             logger.info(f"\n{'=' * 80}")
             logger.info(f"SUBREDDIT: r/{subreddit}")
             logger.info(f"{'=' * 80}\n")

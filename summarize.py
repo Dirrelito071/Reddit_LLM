@@ -41,6 +41,10 @@ total_processed = 0
 total_skipped = 0
 total_errors = 0
 
+# Load custom LLM question from database
+custom_question = db.get_llm_question()
+print(f"Using LLM question: {custom_question[:70]}...\n")
+
 for (subreddit,) in subreddits:
     print(f"r/{subreddit}:")
     
@@ -80,7 +84,7 @@ for (subreddit,) in subreddits:
         post_start = time.time()
         print(f"  [{i}/{len(posts)}] Processing: {short_title}")
         
-        result = llm_processor.process_post(post_id)
+        result = llm_processor.process_post(post_id, custom_question=custom_question)
         elapsed = time.time() - post_start
         
         # Update progress after each post completes

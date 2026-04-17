@@ -61,11 +61,63 @@
   #err { display:none; background:#fef2f2; color:#991b1b;
          padding:8px 16px; font-size:0.8rem; font-weight:600; text-align:center; }
 
-  #pipeline-btn { margin-left: auto; padding: 8px 16px; background: #3b82f6; color: #fff;
+  #pipeline-btn, #settings-btn { padding: 8px 16px; background: #3b82f6; color: #fff;
                   border: none; border-radius: 6px; cursor: pointer; font-weight: 600;
                   font-size: 0.85rem; transition: background 0.2s; }
-  #pipeline-btn:hover:not(:disabled) { background: #2563eb; }
+  #pipeline-btn { margin-left: auto; }
+  #settings-btn { margin-right: 8px; }
+  #pipeline-btn:hover:not(:disabled), #settings-btn:hover { background: #2563eb; }
   #pipeline-btn:disabled { background: #9ca3af; cursor: not-allowed; }
+
+  /* Settings Modal */
+  .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+                   background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+  .modal-content { background: #fff; border-radius: 12px; max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto;
+                   box-shadow: 0 20px 25px rgba(0,0,0,0.15); }
+  .modal-header { background: #1a1a2e; color: #fff; padding: 16px; font-weight: 700; font-size: 1.1rem;
+                  border-radius: 12px 12px 0 0; display: flex; justify-content: space-between; align-items: center; }
+  .modal-close { background: none; border: none; color: #fff; font-size: 1.5rem; cursor: pointer; }
+
+  .settings-tabs { display: flex; border-bottom: 1px solid #e2e6ea; background: #f6f8fa; }
+  .settings-tab { flex: 1; padding: 12px; text-align: center; cursor: pointer; border-bottom: 2px solid transparent;
+                  font-weight: 600; font-size: 0.9rem; color: #666; transition: all 0.2s; }
+  .settings-tab.active { color: #3b82f6; border-bottom-color: #3b82f6; background: #fff; }
+
+  .settings-content { display: none; padding: 20px; }
+  .settings-content.active { display: block; }
+
+  .form-group { margin-bottom: 16px; }
+  .form-label { display: block; font-weight: 600; font-size: 0.9rem; margin-bottom: 6px; color: #333; }
+  .form-input { width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.9rem; font-family: inherit; }
+  .form-input:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+
+  .subreddit-list { background: #f6f8fa; border-radius: 6px; padding: 10px 0; margin-bottom: 12px; }
+  .subreddit-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; 
+                    border-bottom: 1px solid #e5e7eb; }
+  .subreddit-item:last-child { border-bottom: none; }
+  .subreddit-item-name { font-size: 0.9rem; font-weight: 500; }
+  .subreddit-remove { background: #ef4444; color: #fff; border: none; border-radius: 4px; padding: 4px 8px; 
+                      cursor: pointer; font-size: 0.75rem; transition: background 0.2s; }
+  .subreddit-remove:hover { background: #dc2626; }
+
+  .add-subreddit { display: flex; gap: 8px; }
+  .add-subreddit input { flex: 1; }
+  .add-subreddit button { background: #10b981; color: #fff; border: none; border-radius: 6px; padding: 8px 12px;
+                          cursor: pointer; font-weight: 600; font-size: 0.85rem; transition: background 0.2s; }
+  .add-subreddit button:hover { background: #059669; }
+
+  textarea.form-input { resize: vertical; min-height: 100px; font-family: monospace; }
+
+  .modal-buttons { display: flex; gap: 8px; padding: 16px 20px; border-top: 1px solid #e5e7eb; background: #f9fafb; }
+  .modal-buttons button { flex: 1; padding: 10px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;
+                          font-size: 0.9rem; transition: background 0.2s; }
+  .modal-save { background: #3b82f6; color: #fff; }
+  .modal-save:hover { background: #2563eb; }
+  .modal-cancel { background: #e5e7eb; color: #333; }
+  .modal-cancel:hover { background: #d1d5db; }
+
+  .info-text { font-size: 0.8rem; color: #666; margin-top: 6px; font-style: italic; }
+
 </style>
 </head>
 <body>
@@ -76,9 +128,59 @@
       <h1>Daily Digest</h1>
       <p id="hdate"></p>
     </div>
+    <button id="settings-btn">⚙️</button>
     <button id="pipeline-btn">Start Pipeline</button>
   </div>
 </header>
+
+<!-- Settings Modal -->
+<div id="settings-modal" class="modal-overlay" style="display:none">
+  <div class="modal-content">
+    <div class="modal-header">
+      Settings
+      <button class="modal-close" id="settings-close">&times;</button>
+    </div>
+    
+    <div class="settings-tabs">
+      <button class="settings-tab active" data-tab="subreddits">Subreddits</button>
+      <button class="settings-tab" data-tab="llm">LLM Question</button>
+    </div>
+    
+    <!-- Subreddits Tab -->
+    <div id="tab-subreddits" class="settings-content active">
+      <div class="form-group">
+        <label class="form-label">Monitored Subreddits:</label>
+        <div class="subreddit-list" id="subreddit-list"></div>
+        <p class="info-text">Subreddits currently being monitored</p>
+      </div>
+      
+      <div class="form-group">
+        <label class="form-label">Add new subreddit:</label>
+        <div class="add-subreddit">
+          <input type="text" id="subreddit-input" class="form-input" placeholder="e.g., programming" />
+          <button id="subreddit-add-btn">+ Add</button>
+        </div>
+        <p class="info-text">ⓘ Minimum 1 subreddit required</p>
+      </div>
+    </div>
+    
+    <!-- LLM Question Tab -->
+    <div id="tab-llm" class="settings-content">
+      <div class="form-group">
+        <label class="form-label">LLM Question (used for summarization):</label>
+        <textarea id="llm-question" class="form-input" placeholder="Enter your question..."></textarea>
+        <p class="info-text">This question will be asked to the LLM for summarizing posts</p>
+      </div>
+    </div>
+    
+    <div id="settings-error" style="display:none; color: #f44336; padding: 10px; margin: 10px 0; background: #ffebee; border-radius: 4px; font-size: 14px;"></div>
+    
+    <div class="modal-buttons">
+      <button class="modal-save" id="settings-save">Save</button>
+      <button class="modal-cancel" id="settings-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
 
 <div id="err"></div>
 
@@ -186,8 +288,8 @@
     
     document.getElementById('err').style.display = 'none';
     
-    // Extract subreddits data
-    const subreddits = data.subreddits || {};
+    // Extract status data (new format) or fallback to old format
+    const subreddits = data.status || data.subreddits || {};
     
     Object.keys(subreddits).forEach(cat => {
       const s = subreddits[cat];
@@ -254,6 +356,294 @@
         e.textContent = '⚠ python3 news-server2.py is not running';
       })
   , 600);
+
+  // ========== Settings Modal Event Handlers ==========
+
+  // Get DOM elements
+  const settingsBtn = document.getElementById('settings-btn');
+  const settingsModal = document.getElementById('settings-modal');
+  const settingsClose = document.getElementById('settings-close');
+  const settingsCancel = document.getElementById('settings-cancel');
+  const settingsSave = document.getElementById('settings-save');
+  const subredditTabs = document.querySelectorAll('.settings-tab');
+  const subredditList = document.getElementById('subreddit-list');
+  const subredditInput = document.getElementById('subreddit-input');
+  const subredditAddBtn = document.getElementById('subreddit-add-btn');
+  const llmQuestion = document.getElementById('llm-question');
+
+  // Modal open/close functions
+  function openSettings() {
+    settingsModal.style.display = 'block';
+    loadCurrentSettings();
+  }
+
+  function closeSettings() {
+    settingsModal.style.display = 'none';
+    subredditInput.value = '';
+  }
+
+  // Tab switching
+  function switchTab(tabName) {
+    // Hide all tab contents
+    document.querySelectorAll('.settings-content').forEach(tab => {
+      tab.classList.remove('active');
+      tab.style.display = 'none';
+    });
+
+    // Remove active class from all tab buttons
+    subredditTabs.forEach(tab => {
+      tab.classList.remove('active');
+    });
+
+    // Show selected tab
+    const selectedTab = document.getElementById(`tab-${tabName}`);
+    if (selectedTab) {
+      selectedTab.classList.add('active');
+      selectedTab.style.display = 'block';
+    }
+
+    // Add active class to clicked tab
+    event.target.classList.add('active');
+  }
+
+  // Load current settings from backend
+  async function loadCurrentSettings() {
+    try {
+      const response = await fetch('/api/status');
+      const data = await response.json();
+
+      // Load subreddits
+      const subreddits = data.subreddits || [];
+      renderSubredditList(subreddits);
+
+      // Load LLM question
+      const question = data.llm_question || 'Summarize the following Reddit posts';
+      llmQuestion.value = question;
+      clearSettingsError();
+    } catch (error) {
+      console.error('Error loading settings:', error);
+      showSettingsError('Failed to load current settings');
+    }
+  }
+
+  // Render subreddit list
+  function renderSubredditList(subreddits) {
+    subredditList.innerHTML = '';
+    subreddits.forEach(subreddit => {
+      const item = document.createElement('div');
+      item.className = 'subreddit-item';
+      item.innerHTML = `
+        <span>${escapeHtml(subreddit)}</span>
+        <button class="remove-btn" data-subreddit="${escapeHtml(subreddit)}">×</button>
+      `;
+      subredditList.appendChild(item);
+    });
+
+    // Add remove button click handlers
+    document.querySelectorAll('.remove-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+        const subreddit = this.getAttribute('data-subreddit');
+        removeSubredditFromList(subreddit);
+      });
+    });
+  }
+
+  // Remove subreddit from list (UI only, not saved yet)
+  function removeSubredditFromList(subreddit) {
+    const items = document.querySelectorAll('.subreddit-item');
+    items.forEach(item => {
+      if (item.textContent.trim().startsWith(subreddit)) {
+        item.remove();
+      }
+    });
+  }
+
+  // Add subreddit handler
+  function addSubreddit() {
+    const value = subredditInput.value.trim();
+
+    if (!value) {
+      showSettingsError('Please enter a subreddit name');
+      return;
+    }
+
+    if (value.length > 100) {
+      showSettingsError('Subreddit name too long (max 100 characters)');
+      return;
+    }
+
+    // Check for duplicates
+    const items = document.querySelectorAll('.subreddit-item span');
+    for (let item of items) {
+      if (item.textContent.trim().toLowerCase() === value.toLowerCase()) {
+        showSettingsError('Subreddit already added');
+        return;
+      }
+    }
+
+    // Add to UI list
+    const item = document.createElement('div');
+    item.className = 'subreddit-item';
+    item.innerHTML = `
+      <span>${escapeHtml(value)}</span>
+      <button class="remove-btn" data-subreddit="${escapeHtml(value)}">×</button>
+    `;
+    subredditList.appendChild(item);
+
+    // Add remove handler to new button
+    item.querySelector('.remove-btn').addEventListener('click', function() {
+      const subreddit = this.getAttribute('data-subreddit');
+      removeSubredditFromList(subreddit);
+    });
+
+    subredditInput.value = '';
+    clearSettingsError();
+  }
+
+  // Save all settings
+  async function saveSettings() {
+    try {
+      clearSettingsError();
+      settingsSave.disabled = true;
+      settingsSave.textContent = 'Saving...';
+
+      // Get subreddits from UI
+      const subreddits = [];
+      document.querySelectorAll('.subreddit-item span').forEach(span => {
+        subreddits.push(span.textContent.trim());
+      });
+
+      if (subreddits.length === 0) {
+        showSettingsError('At least one subreddit is required');
+        settingsSave.disabled = false;
+        settingsSave.textContent = 'Save Settings';
+        return;
+      }
+
+      // Get LLM question
+      const question = llmQuestion.value.trim();
+      if (!question) {
+        showSettingsError('LLM question cannot be empty');
+        settingsSave.disabled = false;
+        settingsSave.textContent = 'Save Settings';
+        return;
+      }
+
+      // Save subreddits
+      const subResponse = await fetch('/api/settings/subreddits', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subreddits: subreddits })
+      });
+
+      if (!subResponse.ok) {
+        const error = await subResponse.json();
+        throw new Error(error.error || 'Failed to save subreddits');
+      }
+
+      // Save LLM question
+      const qResponse = await fetch('/api/settings/question', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: question })
+      });
+
+      if (!qResponse.ok) {
+        const error = await qResponse.json();
+        throw new Error(error.error || 'Failed to save question');
+      }
+
+      // Success
+      showSettingsSuccess('Settings saved successfully!');
+      setTimeout(() => {
+        closeSettings();
+      }, 1000);
+    } catch (error) {
+      console.error('Error saving settings:', error);
+      showSettingsError('Error: ' + error.message);
+    } finally {
+      settingsSave.disabled = false;
+      settingsSave.textContent = 'Save Settings';
+    }
+  }
+
+  // Utility functions
+  function escapeHtml(text) {
+    const map = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#039;'
+    };
+    return text.replace(/[&<>"']/g, m => map[m]);
+  }
+
+  function showSettingsError(message) {
+    const errorDiv = document.getElementById('settings-error');
+    if (errorDiv) {
+      errorDiv.textContent = message;
+      errorDiv.style.display = 'block';
+      errorDiv.style.color = '#f44336';
+    }
+  }
+
+  function showSettingsSuccess(message) {
+    const errorDiv = document.getElementById('settings-error');
+    if (errorDiv) {
+      errorDiv.textContent = message;
+      errorDiv.style.color = '#4caf50';
+      errorDiv.style.display = 'block';
+      setTimeout(() => {
+        errorDiv.style.color = '#f44336';
+      }, 1000);
+    }
+  }
+
+  function clearSettingsError() {
+    const errorDiv = document.getElementById('settings-error');
+    if (errorDiv) {
+      errorDiv.style.display = 'none';
+      errorDiv.textContent = '';
+    }
+  }
+
+  // Event listeners
+  settingsBtn.addEventListener('click', openSettings);
+  settingsClose.addEventListener('click', closeSettings);
+  settingsCancel.addEventListener('click', closeSettings);
+  settingsSave.addEventListener('click', saveSettings);
+  subredditAddBtn.addEventListener('click', addSubreddit);
+
+  // Allow Enter key to add subreddit
+  subredditInput.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+      addSubreddit();
+    }
+  });
+
+  // Allow Enter key to save (Ctrl+Enter or Cmd+Enter)
+  llmQuestion.addEventListener('keydown', function(e) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      saveSettings();
+    }
+  });
+
+  // Tab click handlers
+  subredditTabs.forEach(tab => {
+    tab.addEventListener('click', function(e) {
+      e.preventDefault();
+      const tabName = this.getAttribute('data-tab');
+      switchTab(tabName);
+    });
+  });
+
+  // Close modal when clicking outside (on overlay background)
+  settingsModal.addEventListener('click', function(e) {
+    if (e.target === settingsModal) {
+      closeSettings();
+    }
+  });
 </script>
 </body>
 </html>

@@ -4,7 +4,10 @@ Database layer - Store Reddit posts in SQLite
 
 import sqlite3
 import json
+import logging
+import config
 
+logger = logging.getLogger(__name__)
 DB_PATH = "reddit_posts.db"
 
 
@@ -45,6 +48,41 @@ def init_db():
         cursor.execute("ALTER TABLE posts ADD COLUMN previous_num_comments INTEGER")
     except:
         pass  # Column already exists
+    
+    # User settings table for custom subreddits and LLM question
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_settings (
+            setting_key TEXT PRIMARY KEY,
+            setting_value TEXT NOT NULL,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    
+    # Seed default values if they don't exist
+    try:
+        # Check if defaults already set
+        cursor.execute("SELECT COUNT(*) FROM user_settings WHERE setting_key = 'subreddits'")
+        if cursor.fetchone()[0] == 0:
+            # Set default subreddits from config
+            default_subs = json.dumps(config.SUBREDDITS)
+            cursor.execute(
+                "INSERT INTO user_settings (setting_key, setting_value) VALUES (?, ?)",
+                ('subreddits', default_subs)
+            )
+            logger.info(f"Initialized subreddits to defaults: {config.SUBREDDITS}")
+        
+        # Check if default question already set
+        cursor.execute("SELECT COUNT(*) FROM user_settings WHERE setting_key = 'llm_question'")
+        if cursor.fetchone()[0] == 0:
+            # Set default question
+            default_question = "What are the key insights from this post, the poster's intention, and the following discussion? Summarize it in 5 sentences."
+            cursor.execute(
+                "INSERT INTO user_settings (setting_key, setting_value) VALUES (?, ?)",
+                ('llm_question', default_question)
+            )
+            logger.info(f"Initialized LLM question to default")
+    except Exception as e:
+        logger.warning(f"Error seeding default values: {e}")
     
     conn.commit()
     conn.close()
@@ -248,3 +286,81 @@ def get_progress():
         }
     
     return progress
+
+
+# User Settings Functions
+
+def get_setting(key, default=None):
+    """Get a user setting from database"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT setting_value FROM user_settings WHERE setting_key = ?", (key,))
+        result = cursor.fetchone()
+        conn.close()
+        return result[0] if result else default
+    except Exception as e:
+        logger.error(f"Error getting setting {key}: {e}")
+        return default
+
+
+def set_setting(key, value):
+    """Set a user setting in database"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT OR REPLACE INTO user_settings (setting_key, setting_value, updated_at)
+            VALUES (?, ?, CURRENT_TIMESTAMP)
+        """, (key, value))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        logger.error(f"Error setting {key}: {e}")
+        return False
+
+
+def get_subreddits():
+    """Get list of subreddits from database (seeds from config if empty on first read)"""
+    stored = get_setting("subreddits")
+    if stored:
+        try:
+            return json.loads(stored)
+        except Exception as e:
+            logger.error(f"Error parsing subreddits from DB: {e}")
+    
+    # Seed from config on first read if not in DB
+    default_subs = json.dumps(config.SUBREDDITS)
+    set_setting("subreddits", default_subs)
+    logger.info(f"Seeded subreddits from config: {config.SUBREDDITS}")
+    return list(config.SUBREDDITS)
+
+
+def set_subreddits(subreddit_list):
+    """Store subreddit list in database"""
+    if not subreddit_list or len(subreddit_list) == 0:
+        logger.error("Cannot set empty subreddit list")
+        return False
+    return set_setting("subreddits", json.dumps(subreddit_list))
+
+
+def get_llm_question():
+    """Get custom LLM question from database (seeds from default if empty on first read)"""
+    stored = get_setting("llm_question")
+    if stored:
+        return stored
+    
+    # Seed from default on first read if not in DB
+    default_question = "What are the key insights from this post, the poster's intention, and the following discussion? Summarize it in 5 sentences."
+    set_setting("llm_question", default_question)
+    logger.info("Seeded LLM question from default")
+    return default_question
+
+
+def set_llm_question(question):
+    """Store custom LLM question in database"""
+    if not question or question.strip() == "":
+        logger.error("Cannot set empty LLM question")
+        return False
+    return set_setting("llm_question", question)
