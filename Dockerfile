@@ -2,13 +2,11 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Clone the repository directly from git
-RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/* && \
-    git clone https://github.com/Dirrelito071/Reddit_LLM.git . && \
-    rm -rf .git
+# Copy application code from build context (server's local repo)
+# This ensures we use the deployed version, not a GitHub clone
+COPY . .
 
 # Install dependencies
-COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Expose port for web server

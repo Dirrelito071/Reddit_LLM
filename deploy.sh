@@ -107,8 +107,15 @@ ssh "$SERVER_HOST" bash << 'EOF'
     cd "$REDDIT_LLM_DIR"
     
     # Build only the reddit-news-server service with --no-cache to get latest code
+    # Uses Dockerfile in current Reddit_LLM directory and docker-compose from mediastack
     echo "[SERVER] Building reddit-llm image..."
-    $DOCKER_CMD compose -f "$SERVER_PATH/docker-compose.yaml" build --no-cache reddit-news-server 2>&1 | tail -20
+    $DOCKER_CMD compose -f "$SERVER_PATH/docker-compose.yaml" -f ./docker-compose.override.yaml build --no-cache reddit-news-server 2>&1 | tail -20
+    
+    # Alternative: build directly using Dockerfile if compose fails
+    if [ $? -ne 0 ]; then
+        echo "[SERVER] Compose build failed, trying direct docker build..."
+        $DOCKER_CMD build --no-cache -t reddit-llm:latest -f ./Dockerfile . 2>&1 | tail -20
+    fi
     
     if [ $? -eq 0 ]; then
         echo "[SERVER] Build successful ✓"
