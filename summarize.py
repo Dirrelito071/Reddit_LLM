@@ -80,18 +80,18 @@ for (subreddit,) in subreddits:
         short_title = title[:50] + "..." if len(title) > 50 else title
         
         # Update progress before processing (shows current post being worked on)
-        pct = int(((i - 1) / len(posts)) * 100)
-        db.update_progress(subreddit, "summarizing", pct, len(posts))
+        pct = int(((i - 1) / len(posts_to_process)) * 100)
+        db.update_progress(subreddit, "summarizing", pct, len(posts_to_process))
         
         post_start = time.time()
-        print(f"  [{i}/{len(posts)}] Processing: {short_title}")
+        print(f"  [{i}/{len(posts_to_process)}] Processing: {short_title}")
         
         result = llm_processor.process_post(post_id, custom_question=custom_question)
         elapsed = time.time() - post_start
         
         # Update progress after each post completes
-        pct = int((i / len(posts)) * 100)
-        db.update_progress(subreddit, "summarizing", pct, len(posts))
+        pct = int((i / len(posts_to_process)) * 100)
+        db.update_progress(subreddit, "summarizing", pct, len(posts_to_process))
         
         if result is True:
             print(f"       ✓ Summarized ({elapsed:.1f}s)\n")
