@@ -106,32 +106,46 @@ ssh "$SERVER_HOST" bash << 'EOF'
     
     cd "$REDDIT_LLM_DIR"
     
+    # Force stop and remove container first (so we can delete image)
+    echo "[SERVER] Stopping reddit-news-server container..."
+    $DOCKER_CMD compose -f "$SERVER_PATH/docker-compose.yaml" stop reddit-news-server 2>&1 || true
+    $DOCKER_CMD compose -f "$SERVER_PATH/docker-compose.yaml" rm -f reddit-news-server 2>&1 || true
+    
     # Remove old reddit-llm image to force complete rebuild
     echo "[SERVER] Removing old reddit-llm image..."
-    $DOCKER_CMD rmi reddit-llm:latest 2>&1 || true
+    $DOCKER_CMD rmi -f reddit-llm:latest 2>&1 || true
+    
+    # Pre-pull base image to avoid credential issues
+    echo "[SERVER] Pre-pulling base image python:3.11-slim..."
+    $DOCKER_CMD pull python:3.11-slim 2>&1 | tail -5
     
     # Also clean build cache
     echo "[SERVER] Cleaning Docker build cache..."
-    $DOCKER_CMD builder prune -af --filter "label!=keep" 2>&1 || true
+    $DOCKER_CMD builder prune -af 2>&1 || true
     
-    # Build directly using Dockerfile with --no-cache (most reliable)
+    # Build directly using Dockerfile with --no-cache
     echo "[SERVER] Building reddit-llm image from Dockerfile..."
-    $DOCKER_CMD build --no-cache -t reddit-llm:latest -f ./Dockerfile . 2>&1 | tail -30
+    BUILD_OUTPUT=$($DOCKER_CMD build --no-cache -t reddit-llm:latest -f ./Dockerfile . 2>&1)
+    BUILD_EXIT=$?
     
-    if [ $? -eq 0 ]; then
+    echo "$BUILD_OUTPUT" | tail -30
+    
+    if [ $BUILD_EXIT -eq 0 ]; then
         echo "[SERVER] Build successful ✓"
         echo "[SERVER] Verifying image was created..."
         $DOCKER_CMD images reddit-llm:latest
     else
-        echo "[SERVER] Build failed!"
+        echo "[SERVER] Build failed with exit code $BUILD_EXIT"
+        echo "[SERVER] Full error output:"
+        echo "$BUILD_OUTPUT" | grep -i "error" | head -5
         exit 1
     fi
 EOF
 
 log_success "Docker image built"
 
-# Step 4: Restart ONLY the reddit-news-server container
-log_info "Step 4: Restarting reddit-news-server container..."
+# Step 4: Start container with new image
+log_info "Step 4: Starting container with new image..."
 
 ssh "$SERVER_HOST" bash << 'EOF'
     SERVER_PATH="/Users/server/mediastack"
@@ -139,15 +153,7 @@ ssh "$SERVER_HOST" bash << 'EOF'
     
     cd "$SERVER_PATH"
     
-    # Stop only the reddit-news-server container
-    echo "[SERVER] Stopping reddit-news-server..."
-    $DOCKER_CMD compose stop reddit-news-server 2>&1 || true
-    
-    # Remove only the reddit-news-server container (image stays)
-    echo "[SERVER] Removing old container..."
-    $DOCKER_CMD compose rm -f reddit-news-server 2>&1 || true
-    
-    # Start the reddit-news-server with the new image
+    # Start the reddit-news-server with the new image (container was already removed in Step 3)
     echo "[SERVER] Starting reddit-news-server with new image..."
     $DOCKER_CMD compose up -d reddit-news-server
     
@@ -182,13 +188,13 @@ ssh "$SERVER_HOST" bash << 'EOF'
     # Check if user_settings table creation code exists
     if $DOCKER_CMD exec reddit-news-server test -f /app/db.py; then
         echo "[SERVER] db.py found, checking for user_settings..."
-        SETTINGS_COUNT=$($DOCKER_CMD exec reddit-news-server grep -c "user_settings" /app/db.py || echo "0")
+        SETTINGS_COUNT=$($DOCKER_CMD exec reddit-news-server grep "user_settings" /app/db.py 2>/dev/null | wc -l)
         if [ "$SETTINGS_COUNT" -gt 0 ]; then
-            echo "[SERVER] ✓ Settings panel code found ($SETTINGS_COUNT occurrences in db.py)"
+            echo "[SERVER] ✓ Settings panel code found ($SETTINGS_COUNT lines match)"
         else
             echo "[SERVER] ERROR: user_settings not found in db.py"
             echo "[SERVER] First 80 lines of db.py:"
-            $DOCKER_CMD exec reddit-news-server head -80 /app/db.py
+            $DOCKER_CMD exec reddit-news-server head -80 /app/db.py 2>&1
             exit 1
         fi
     else
