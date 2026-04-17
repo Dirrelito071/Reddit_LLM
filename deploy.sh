@@ -141,8 +141,8 @@ ssh "$SERVER_HOST" bash << 'EOF'
     
     # Force stop and remove container first (so we can delete image)
     echo "[SERVER] Stopping reddit-news-server container..."
-    $DOCKER_CMD compose -f "$SERVER_PATH/docker-compose.yaml" stop reddit-news-server 2>&1 || true
-    $DOCKER_CMD compose -f "$SERVER_PATH/docker-compose.yaml" rm -f reddit-news-server 2>&1 || true
+    REDDIT_LLM_DIR="$REDDIT_LLM_DIR" $DOCKER_CMD compose -f "$SERVER_PATH/docker-compose.yaml" stop reddit-news-server 2>&1 || true
+    REDDIT_LLM_DIR="$REDDIT_LLM_DIR" $DOCKER_CMD compose -f "$SERVER_PATH/docker-compose.yaml" rm -f reddit-news-server 2>&1 || true
     
     # Remove old reddit-llm image to force complete rebuild
     echo "[SERVER] Removing old reddit-llm image..."
@@ -184,7 +184,7 @@ ssh "$SERVER_HOST" bash << 'EOF'
     
     # Start the reddit-news-server with the newly built image
     echo "[SERVER] Starting reddit-news-server with new image..."
-    $DOCKER_CMD compose -f docker-compose.yaml up -d reddit-news-server
+    REDDIT_LLM_DIR="$REDDIT_LLM_DIR" $DOCKER_CMD compose -f docker-compose.yaml up -d reddit-news-server
     
     echo "[SERVER] Waiting for container to start..."
     sleep 5
