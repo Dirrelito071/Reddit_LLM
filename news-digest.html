@@ -336,7 +336,8 @@
   fetch('/api/status')
     .then(r => r.json())
     .then(data => {
-      const subreddits = Object.keys(data.subreddits || data);
+      // data.subreddits is an array from API; data.status contains status per subreddit
+      const subreddits = data.subreddits || Object.keys(data.status || data);
       initializeTabs(subreddits);
       applyStatus(data);
     })
