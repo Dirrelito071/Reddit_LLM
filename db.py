@@ -123,13 +123,23 @@ def post_exists(post_id):
 
 
 def content_changed(post_id, new_score, new_num_comments):
-    """Check if post content has changed (score or comments)"""
+    """Check if post metrics have changed (score or comments)"""
     existing = post_exists(post_id)
     if not existing:
         return False  # Post doesn't exist yet
     
     old_score, old_num_comments = existing
     return (old_score != new_score) or (old_num_comments != new_num_comments)
+
+
+def comments_changed(post_id, new_num_comments):
+    """Check if comment count changed (triggers re-summarization)"""
+    existing = post_exists(post_id)
+    if not existing:
+        return False
+    
+    old_score, old_num_comments = existing
+    return old_num_comments != new_num_comments
 
 
 def store_or_update_post(post_data, json_payload):
@@ -151,21 +161,29 @@ def store_or_update_post(post_data, json_payload):
         
         # Check if post exists
         if post_exists(post_id):
-            # Post exists - check if content changed
+            # Post exists - check if metrics changed (for ranking updates)
             if content_changed(post_id, post_data['score'], post_data['num_comments']):
                 # Get current values to store as previous
                 cursor.execute("""
-                    SELECT score, num_comments FROM posts WHERE post_id = ?
+                    SELECT score, num_comments, status FROM posts WHERE post_id = ?
                 """, (post_id,))
                 prev_result = cursor.fetchone()
-                prev_score, prev_num_comments = prev_result if prev_result else (None, None)
+                prev_score, prev_num_comments, current_status = prev_result if prev_result else (None, None, None)
                 
-                # Content changed - update with previous values stored
+                # Determine new status:
+                # - Only set 'refreshed' if comments changed (new discussion to summarize)
+                # - If only score changed, preserve current status (e.g., 'summarized')
+                if prev_num_comments != post_data['num_comments']:
+                    new_status = 'refreshed'
+                else:
+                    new_status = current_status  # Keep existing status
+                
+                # Update metrics (always update for ranking) but status only changes if comments changed
                 cursor.execute("""
                     UPDATE posts 
                     SET score = ?, upvote_ratio = ?, num_comments = ?, 
                         previous_score = ?, previous_num_comments = ?,
-                        status = 'refreshed', updated_at = CURRENT_TIMESTAMP, json_data = ?
+                        status = ?, updated_at = CURRENT_TIMESTAMP, json_data = ?
                     WHERE post_id = ?
                 """, (
                     post_data['score'],
@@ -173,12 +191,13 @@ def store_or_update_post(post_data, json_payload):
                     post_data['num_comments'],
                     prev_score,
                     prev_num_comments,
+                    new_status,
                     json.dumps(json_payload),
                     post_id
                 ))
                 conn.commit()
                 conn.close()
-                return "refreshed"
+                return "refreshed" if new_status == 'refreshed' else "updated"
             else:
                 # Content unchanged - skip
                 conn.close()

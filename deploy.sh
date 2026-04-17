@@ -96,13 +96,9 @@ EOF
 
 log_success "Repository cloned/updated"
 
-# Step 1b: Sync database file to server (must be after git reset!)
-log_info "Step 1b: Syncing database file to server (after git reset)..."
-if [ -f "reddit_posts.db" ]; then
-    scp reddit_posts.db "Server@server:/Users/server/mediastack/Reddit_LLM/reddit_posts.db" 2>/dev/null && log_success "Database file synced" || log_warning "Database sync skipped"
-else
-    log_warning "reddit_posts.db not found locally, skipping sync"
-fi
+# NOTE: Database file (reddit_posts.db) lives on server only.
+# Do NOT sync from local - server DB has live data, local may be stale/empty.
+# The docker-compose volume mount preserves the server DB across deployments.
 
 # Step 2: Verify Dockerfile exists
 log_info "Step 2: Verifying Dockerfile..."

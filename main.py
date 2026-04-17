@@ -118,6 +118,10 @@ for subreddit in subreddits_to_process:
                 elif result == "refreshed":
                     print(f"  [{i}/25] ↻ Refreshed: {title} ({store_data['score']} pts, {store_data['num_comments']} comments)")
                     refreshed_count += 1
+                elif result == "updated":
+                    # Score changed but comments didn't - no re-summarization needed
+                    print(f"  [{i}/25] ↑ Updated: {title} ({store_data['score']} pts)")
+                    unchanged_count += 1  # Count as unchanged for summary purposes
                 elif result == "unchanged":
                     print(f"  [{i}/25] ⊘ Unchanged: {title}")
                     unchanged_count += 1
