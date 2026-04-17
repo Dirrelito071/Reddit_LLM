@@ -48,21 +48,18 @@ print(f"Using LLM question: {custom_question[:70]}...\n")
 for (subreddit,) in subreddits:
     print(f"r/{subreddit}:")
     
-    # Get top posts (ordered by score, any status)
-    # Then filter to only new/refreshed and take up to 5
-    # This ensures we process the highest-ranked posts that need updating
+    # Get top 5 posts that need summarization
+    # Skip only 'summarized' posts (already processed by LLM)
+    # Process 'new', 'refreshed', and 'unchanged' - the LLM processor will skip if metrics identical
     cursor.execute("""
         SELECT post_id, title, status
         FROM posts
-        WHERE subreddit = ?
+        WHERE subreddit = ? AND status != 'summarized'
         ORDER BY score DESC
-        LIMIT 50
+        LIMIT 5
     """, (subreddit,))
     
-    all_posts = cursor.fetchall()
-    
-    # Filter to only new/refreshed posts, up to 5
-    posts_to_process = [p for p in all_posts if p[2] in ('new', 'refreshed')][:5]
+    posts_to_process = cursor.fetchall()
     
     if not posts_to_process:
         print(f"  ✓ All top posts already summarized\n")
@@ -70,7 +67,7 @@ for (subreddit,) in subreddits:
         db.update_progress(subreddit, "ready", 100, 5)
         continue
     
-    print(f"  Found {len(posts_to_process)} unsummarized posts in top {len(all_posts)}\n")
+    print(f"  Found {len(posts_to_process)} unsummarized posts\n")
     
     # Update progress: summarizing phase starting (start at 20% = 1/5 about to be processed)
     db.update_progress(subreddit, "summarizing", 20, len(posts_to_process))
