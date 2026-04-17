@@ -155,7 +155,7 @@ ssh "$SERVER_HOST" bash << 'EOF'
     # Build using docker compose with --no-cache to ensure fresh build
     echo "[SERVER] Building reddit-llm image using docker compose (this may take 1-2 minutes)..."
     cd "$SERVER_PATH"
-    BUILD_OUTPUT=$($DOCKER_CMD compose -f docker-compose.yaml build --no-cache reddit-news-server 2>&1)
+    BUILD_OUTPUT=$(REDDIT_LLM_DIR="$REDDIT_LLM_DIR" $DOCKER_CMD compose -f docker-compose.yaml build --no-cache reddit-news-server 2>&1)
     BUILD_EXIT=$?
     
     # Show last 20 lines of build output

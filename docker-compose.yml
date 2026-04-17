@@ -11,9 +11,9 @@ services:
       - MODEL=mistral:7b-instruct
       - LOG_LEVEL=INFO
     volumes:
-      - ./reddit_posts.db:/app/reddit_posts.db
-      - ./data:/app/data
-      - ./logs:/app/logs
+      - ${REDDIT_LLM_DIR:-.}/reddit_posts.db:/app/reddit_posts.db
+      - ${REDDIT_LLM_DIR:-.}/data:/app/data
+      - ${REDDIT_LLM_DIR:-.}/logs:/app/logs
     networks:
       - reddit-llm
     restart: unless-stopped
