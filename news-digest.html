@@ -337,8 +337,8 @@
   fetch('/api/status')
     .then(r => r.json())
     .then(data => {
-      // data.subreddits is an array from API; data.status contains status per subreddit
-      const subreddits = data.subreddits || Object.keys(data.status || data);
+      // Get subreddit names from status object keys (most reliable)
+      const subreddits = Object.keys(data.status || {});
       initializeTabs(subreddits);
       applyStatus(data);
     })
