@@ -48,35 +48,38 @@ print(f"Using LLM question: {custom_question[:70]}...\n")
 for (subreddit,) in subreddits:
     print(f"r/{subreddit}:")
     
-    # Get top 5 posts that need summarization (new or refreshed only)
-    # Skip 'unchanged' posts (no content change = no need to re-summarize)
-    # Skip 'summarized' posts (already processed)
+    # Get top posts (ordered by score, any status)
+    # Then filter to only new/refreshed and take up to 5
+    # This ensures we process the highest-ranked posts that need updating
     cursor.execute("""
         SELECT post_id, title, status
         FROM posts
-        WHERE subreddit = ? AND status IN ('new', 'refreshed')
+        WHERE subreddit = ?
         ORDER BY score DESC
-        LIMIT 5
+        LIMIT 50
     """, (subreddit,))
     
-    posts = cursor.fetchall()
+    all_posts = cursor.fetchall()
     
-    if not posts:
+    # Filter to only new/refreshed posts, up to 5
+    posts_to_process = [p for p in all_posts if p[2] in ('new', 'refreshed')][:5]
+    
+    if not posts_to_process:
         print(f"  ✓ All top posts already summarized\n")
         # Mark as ready if no posts to summarize
         db.update_progress(subreddit, "ready", 100, 5)
         continue
     
-    print(f"  Found {len(posts)} unsummarized posts\n")
+    print(f"  Found {len(posts_to_process)} unsummarized posts in top {len(all_posts)}\n")
     
     # Update progress: summarizing phase starting (start at 20% = 1/5 about to be processed)
-    db.update_progress(subreddit, "summarizing", 20, len(posts))
+    db.update_progress(subreddit, "summarizing", 20, len(posts_to_process))
     
     processed = 0
     skipped = 0
     errors = 0
     
-    for i, (post_id, title, status) in enumerate(posts, 1):
+    for i, (post_id, title, status) in enumerate(posts_to_process, 1):
         short_title = title[:50] + "..." if len(title) > 50 else title
         
         # Update progress before processing (shows current post being worked on)
