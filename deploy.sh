@@ -96,8 +96,8 @@ EOF
 
 log_success "Dockerfile verified"
 
-# Step 3: Clean old image and rebuild
-log_info "Step 3: Cleaning old image and rebuilding..."
+# Step 3: Fix Docker credentials and rebuild
+log_info "Step 3: Fixing Docker credentials and rebuilding..."
 
 ssh "$SERVER_HOST" bash << 'EOF'
     SERVER_PATH="/Users/server/mediastack"
@@ -105,6 +105,17 @@ ssh "$SERVER_HOST" bash << 'EOF'
     REDDIT_LLM_DIR="$SERVER_PATH/Reddit_LLM"
     
     cd "$REDDIT_LLM_DIR"
+    
+    # Fix Docker credential helper issue on macOS (docker-credential-desktop not in PATH during builds)
+    # Remove credsStore temporarily - Docker will use stored credentials instead
+    if [ -f ~/.docker/config.json ]; then
+        echo "[SERVER] Fixing Docker credentials configuration..."
+        if grep -q '"credsStore"' ~/.docker/config.json; then
+            cp ~/.docker/config.json ~/.docker/config.json.bak
+            jq 'del(.credsStore)' ~/.docker/config.json.bak > ~/.docker/config.json
+            echo "[SERVER] Removed credsStore from config.json"
+        fi
+    fi
     
     # Force stop and remove container first (so we can delete image)
     echo "[SERVER] Stopping reddit-news-server container..."
@@ -115,29 +126,24 @@ ssh "$SERVER_HOST" bash << 'EOF'
     echo "[SERVER] Removing old reddit-llm image..."
     $DOCKER_CMD rmi -f reddit-llm:latest 2>&1 || true
     
-    # Pre-pull base image to avoid credential issues
-    echo "[SERVER] Pre-pulling base image python:3.11-slim..."
-    $DOCKER_CMD pull python:3.11-slim 2>&1 | tail -5
-    
-    # Also clean build cache
+    # Clean build cache
     echo "[SERVER] Cleaning Docker build cache..."
-    $DOCKER_CMD builder prune -af 2>&1 || true
+    $DOCKER_CMD builder prune -af 2>&1 >/dev/null || true
     
     # Build directly using Dockerfile with --no-cache
-    echo "[SERVER] Building reddit-llm image from Dockerfile..."
+    echo "[SERVER] Building reddit-llm image from Dockerfile (this may take 1-2 minutes)..."
     BUILD_OUTPUT=$($DOCKER_CMD build --no-cache -t reddit-llm:latest -f ./Dockerfile . 2>&1)
     BUILD_EXIT=$?
     
-    echo "$BUILD_OUTPUT" | tail -30
+    # Show last 20 lines of build output
+    echo "$BUILD_OUTPUT" | tail -20
     
     if [ $BUILD_EXIT -eq 0 ]; then
         echo "[SERVER] Build successful ✓"
-        echo "[SERVER] Verifying image was created..."
-        $DOCKER_CMD images reddit-llm:latest
     else
         echo "[SERVER] Build failed with exit code $BUILD_EXIT"
-        echo "[SERVER] Full error output:"
-        echo "$BUILD_OUTPUT" | grep -i "error" | head -5
+        echo "[SERVER] Error details:"
+        echo "$BUILD_OUTPUT" | grep -i "error" | head -10
         exit 1
     fi
 EOF
@@ -185,28 +191,24 @@ ssh "$SERVER_HOST" bash << 'EOF'
     # Check if the new code is loaded (check for Settings panel features)
     echo "[SERVER] Checking for latest code features..."
     
+    # Check if the new code is loaded (check for Settings panel features)
+    echo "[SERVER] Checking for latest code features..."
+    
     # Check if user_settings table creation code exists
-    if $DOCKER_CMD exec reddit-news-server test -f /app/db.py; then
-        echo "[SERVER] db.py found, checking for user_settings..."
-        SETTINGS_COUNT=$($DOCKER_CMD exec reddit-news-server grep "user_settings" /app/db.py 2>/dev/null | wc -l)
-        if [ "$SETTINGS_COUNT" -gt 0 ]; then
-            echo "[SERVER] ✓ Settings panel code found ($SETTINGS_COUNT lines match)"
-        else
-            echo "[SERVER] ERROR: user_settings not found in db.py"
-            echo "[SERVER] First 80 lines of db.py:"
-            $DOCKER_CMD exec reddit-news-server head -80 /app/db.py 2>&1
-            exit 1
+    SETTINGS_COUNT=$($DOCKER_CMD exec reddit-news-server grep "user_settings" /app/db.py 2>/dev/null | wc -l)
+    
+    if [ "$SETTINGS_COUNT" -gt 0 ]; then
+        echo "[SERVER] ✓ Settings panel code found ($SETTINGS_COUNT references to user_settings)"
+        
+        # Also verify news-server2.py exists
+        if $DOCKER_CMD exec reddit-news-server test -f /app/news-server2.py; then
+            echo "[SERVER] ✓ news-server2.py found"
         fi
     else
-        echo "[SERVER] ERROR: db.py not found in container"
+        echo "[SERVER] ERROR: Settings code not found in db.py"
+        echo "[SERVER] Container content:"
+        $DOCKER_CMD exec reddit-news-server ls -la /app/db.py
         exit 1
-    fi
-    
-    # Verify news-server2.py exists
-    if $DOCKER_CMD exec reddit-news-server test -f /app/news-server2.py; then
-        echo "[SERVER] ✓ news-server2.py found"
-    else
-        echo "[SERVER] WARNING: news-server2.py not found"
     fi
     
     echo "[SERVER] Deployment verification complete!"
