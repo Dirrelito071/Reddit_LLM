@@ -8,6 +8,11 @@ import requests
 import feedparser
 import db
 import sys
+import json
+
+# Initialize database to seed defaults if needed
+db.init_db()
+db.init_progress()
 
 # Check for --subreddit parameter
 target_subreddit = None
@@ -15,7 +20,9 @@ if len(sys.argv) > 2 and sys.argv[1] == "--subreddit":
     target_subreddit = sys.argv[2]
     subreddits_to_process = [target_subreddit]
 else:
-    subreddits_to_process = config.SUBREDDITS
+    # Load subreddits from database (seeded from config.py on first run)
+    subreddits_json = db.get_setting("subreddits", json.dumps(config.SUBREDDITS))
+    subreddits_to_process = json.loads(subreddits_json)
 
 if target_subreddit:
     print("=" * 80)
@@ -25,12 +32,11 @@ else:
     print("=" * 80)
     print("REDDIT POST COLLECTOR")
     print("=" * 80)
-    print(f"Subreddits: {', '.join(config.SUBREDDITS)}")
+    print(f"Subreddits: {', '.join(subreddits_to_process)}")
 
 print()
 
-# Initialize database
-db.init_db()
+# Initialize progress tracking
 db.init_progress()
 print("✓ Database initialized\n")
 
