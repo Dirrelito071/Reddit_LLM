@@ -63,6 +63,7 @@ ssh "$SERVER_HOST" bash << 'EOF'
     REPO_URL="https://github.com/Dirrelito071/Reddit_LLM.git"
     SERVER_PATH="/Users/server/mediastack"
     REDDIT_LLM_DIR="$SERVER_PATH/Reddit_LLM"
+    DOCKER_CMD="/Applications/Docker.app/Contents/Resources/bin/docker"
     
     if [ -d "$REDDIT_LLM_DIR/.git" ]; then
         echo "[SERVER] Repository exists, pulling latest changes..."
@@ -100,13 +101,14 @@ log_info "Step 3: Building Docker image (this may take a few minutes)..."
 
 ssh "$SERVER_HOST" bash << 'EOF'
     SERVER_PATH="/Users/server/mediastack"
-    DOCKER_CMD="/Applications/Docker.app/Contents/Resources/bin/docker-compose"
+    DOCKER_CMD="/Applications/Docker.app/Contents/Resources/bin/docker"
+    REDDIT_LLM_DIR="$SERVER_PATH/Reddit_LLM"
     
-    cd "$SERVER_PATH"
+    cd "$REDDIT_LLM_DIR"
     
     # Build only the reddit-news-server service with --no-cache to get latest code
     echo "[SERVER] Building reddit-llm image..."
-    $DOCKER_CMD build --no-cache reddit-news-server 2>&1 | tail -20
+    $DOCKER_CMD compose -f "$SERVER_PATH/docker-compose.yaml" build --no-cache reddit-news-server 2>&1 | tail -20
     
     if [ $? -eq 0 ]; then
         echo "[SERVER] Build successful ✓"
@@ -123,27 +125,27 @@ log_info "Step 4: Restarting reddit-news-server container..."
 
 ssh "$SERVER_HOST" bash << 'EOF'
     SERVER_PATH="/Users/server/mediastack"
-    DOCKER_COMPOSE_CMD="/Applications/Docker.app/Contents/Resources/bin/docker-compose"
+    DOCKER_CMD="/Applications/Docker.app/Contents/Resources/bin/docker"
     
     cd "$SERVER_PATH"
     
     # Stop only the reddit-news-server container
     echo "[SERVER] Stopping reddit-news-server..."
-    $DOCKER_COMPOSE_CMD stop reddit-news-server 2>&1 || true
+    $DOCKER_CMD compose stop reddit-news-server 2>&1 || true
     
     # Remove only the reddit-news-server container (image stays)
     echo "[SERVER] Removing old container..."
-    $DOCKER_COMPOSE_CMD rm -f reddit-news-server 2>&1 || true
+    $DOCKER_CMD compose rm -f reddit-news-server 2>&1 || true
     
     # Start the reddit-news-server with the new image
     echo "[SERVER] Starting reddit-news-server with new image..."
-    $DOCKER_COMPOSE_CMD up -d reddit-news-server
+    $DOCKER_CMD compose up -d reddit-news-server
     
     echo "[SERVER] Waiting for container to start..."
     sleep 5
     
     # Verify container is running
-    $DOCKER_COMPOSE_CMD ps reddit-news-server
+    $DOCKER_CMD compose ps reddit-news-server
 EOF
 
 log_success "Container restarted"
@@ -193,9 +195,10 @@ log_info "Step 6: Final status check..."
 
 ssh "$SERVER_HOST" bash << 'EOF'
     DOCKER_CMD="/Applications/Docker.app/Contents/Resources/bin/docker"
+    SERVER_PATH="/Users/server/mediastack"
     
     echo "[SERVER] === Reddit LLM Container Status ==="
-    $DOCKER_CMD ps --filter "name=reddit-news-server" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+    $DOCKER_CMD compose -f "$SERVER_PATH/docker-compose.yaml" ps reddit-news-server
     
     echo "[SERVER]"
     echo "[SERVER] === Recent Container Logs ==="
