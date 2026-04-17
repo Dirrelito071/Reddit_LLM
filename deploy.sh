@@ -56,6 +56,17 @@ log_info "Starting Reddit LLM deployment..."
 log_info "Server: $SERVER_HOST"
 log_info "Path: $REDDIT_LLM_DIR"
 
+# Step 0: Push local changes to GitHub (if any)
+log_info "Step 0: Ensuring local changes are pushed to GitHub..."
+if ! git diff-index --quiet HEAD --; then
+    log_warning "Uncommitted changes detected. Commit them first:"
+    git status
+    exit 1
+fi
+
+git push origin main 2>/dev/null || true
+log_success "Local changes pushed to GitHub"
+
 # Step 1: Clone or update repository
 log_info "Step 1: Cloning/updating repository..."
 
