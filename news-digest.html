@@ -87,13 +87,39 @@
     #err { display:none; background:rgba(239,68,68,0.12); color:var(--accent-red);
      padding:8px 16px; font-size:0.8rem; font-weight:600; text-align:center; border-radius: 6px; }
 
-    #pipeline-btn, #settings-btn { padding: 8px 16px; background: var(--accent-blue); color: #fff;
-        border: none; border-radius: 6px; cursor: pointer; font-weight: 600;
-        font-size: 0.85rem; transition: background 0.2s; }
-    #pipeline-btn { margin-left: auto; }
-    #settings-btn { margin-right: 8px; }
-    #pipeline-btn:hover:not(:disabled), #settings-btn:hover { background: var(--accent-blue-light); }
-    #pipeline-btn:disabled { background: #334155; cursor: not-allowed; }
+    #refresh-btn {
+      background: none;
+      border: none;
+      color: #60a5fa;
+      font-size: 1.35rem;
+      padding: 0 10px 0 0;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      transition: color 0.2s;
+    }
+    #refresh-btn:disabled {
+      color: #334155;
+      cursor: not-allowed;
+    }
+    #refresh-btn:hover:not(:disabled) {
+      color: #3b82f6;
+    }
+
+    #settings-btn {
+      background: none;
+      border: none;
+      color: #a0a8c0;
+      font-size: 1.35rem;
+      padding: 0 0 0 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      transition: color 0.2s;
+    }
+    #settings-btn:hover {
+      color: #60a5fa;
+    }
 
     /* Settings Modal */
     .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
@@ -149,13 +175,17 @@
 <body>
 
 <header>
-  <div style="display: flex; align-items: center; gap: 16px;">
-    <div>
-      <h1>Daily Digest</h1>
-      <p id="hdate"></p>
+  <div style="display: flex; align-items: center; justify-content: space-between; gap: 0;">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <button id="refresh-btn" title="Refresh Pipeline" aria-label="Refresh Pipeline">
+        ⟳
+      </button>
+      <div style="display: flex; flex-direction: column; align-items: flex-start;">
+        <h1 style="font-size: 1.3rem;">Daily Digest</h1>
+        <p id="hdate"></p>
+      </div>
     </div>
-    <button id="settings-btn">⚙️</button>
-    <button id="pipeline-btn">Start Pipeline</button>
+    <button id="settings-btn" title="Settings" aria-label="Settings">⚙️</button>
   </div>
 </header>
 
@@ -226,6 +256,25 @@
 
   document.getElementById('hdate').textContent =
     new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
+
+  // Refresh button handler (replaces pipeline-btn)
+  const refreshBtn = document.getElementById('refresh-btn');
+  refreshBtn.addEventListener('click', async () => {
+    try {
+      refreshBtn.disabled = true;
+      const response = await fetch('/api/run', { method: 'POST' });
+      const data = await response.json();
+      if (data.started) {
+        console.log('Pipeline started');
+      } else if (data.error) {
+        alert('Error: ' + data.error);
+      }
+    } catch (err) {
+      alert('Failed to start pipeline: ' + err);
+    } finally {
+      setTimeout(() => { refreshBtn.disabled = false; }, 1000);
+    }
+  });
 
   function show(cat, btn) {
     document.querySelectorAll('.pane').forEach(p => p.classList.remove('on'));
@@ -305,29 +354,22 @@
   }
 
   function applyStatus(data) {
-    const btn = document.getElementById('pipeline-btn');
     const isRunning = data.running;
-    
-    // Update button state
-    btn.disabled = isRunning;
-    btn.textContent = isRunning ? 'Pipeline Running...' : 'Start Pipeline';
-    
+    // Update refresh icon state
+    refreshBtn.disabled = isRunning;
+    refreshBtn.title = isRunning ? 'Pipeline Running...' : 'Refresh Pipeline';
     document.getElementById('err').style.display = 'none';
-    
     // data.status is the object with per-subreddit status
     // Use that, don't fall back to data.subreddits (which is an array)
     const statusMap = data.status || {};
-    
     Object.keys(statusMap).forEach(cat => {
       const s = statusMap[cat];
       const tab = document.querySelector(`.tab[data-cat="${cat}"]`);
       if (!tab) return;
-      
       tab.className = `tab${tab.classList.contains('active')?' active':''} phase-${s.phase}`;
       document.getElementById('bar-' + cat).style.width = s.pct + '%';
       document.getElementById('lbl-' + cat).textContent = s.label;
       document.getElementById('bdg-' + cat).textContent = s.phase;
-      
       // Format and display last_updated timestamp
       if (s.last_updated) {
         const ts = new Date(s.last_updated);
@@ -336,7 +378,6 @@
       } else {
         document.getElementById('ts-' + cat).textContent = '';
       }
-
       if (s.phase === 'ready' && prev[cat] !== 'ready') {
         fetch('/api/news').then(r => r.json()).then(d => renderNews(cat, d[cat]));
       }
