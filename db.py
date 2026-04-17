@@ -58,8 +58,25 @@ def init_db():
         )
     """)
     
-    # Seed default values if they don't exist
+    conn.commit()
+    
+    # Seed default values if they don't exist (separate transaction)
+    _seed_default_settings(conn)
+    
+    conn.close()
+
+
+def _seed_default_settings(conn=None):
+    """Seed default settings if user_settings table is empty"""
+    if conn is None:
+        conn = sqlite3.connect(DB_PATH)
+        close_conn = True
+    else:
+        close_conn = False
+    
     try:
+        cursor = conn.cursor()
+        
         # Check if defaults already set
         cursor.execute("SELECT COUNT(*) FROM user_settings WHERE setting_key = 'subreddits'")
         if cursor.fetchone()[0] == 0:
@@ -69,7 +86,7 @@ def init_db():
                 "INSERT INTO user_settings (setting_key, setting_value) VALUES (?, ?)",
                 ('subreddits', default_subs)
             )
-            logger.info(f"Initialized subreddits to defaults: {config.SUBREDDITS}")
+            logger.info(f"✓ Seeded default subreddits: {config.SUBREDDITS}")
         
         # Check if default question already set
         cursor.execute("SELECT COUNT(*) FROM user_settings WHERE setting_key = 'llm_question'")
@@ -80,12 +97,15 @@ def init_db():
                 "INSERT INTO user_settings (setting_key, setting_value) VALUES (?, ?)",
                 ('llm_question', default_question)
             )
-            logger.info(f"Initialized LLM question to default")
+            logger.info(f"✓ Seeded default LLM question")
+        
+        conn.commit()
     except Exception as e:
-        logger.warning(f"Error seeding default values: {e}")
-    
-    conn.commit()
-    conn.close()
+        logger.error(f"Error seeding default values: {e}")
+        conn.rollback()
+    finally:
+        if close_conn:
+            conn.close()
 
 
 def post_exists(post_id):
@@ -295,6 +315,12 @@ def get_setting(key, default=None):
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
+        
+        # Ensure defaults are seeded if table exists but is empty
+        cursor.execute("SELECT COUNT(*) FROM user_settings")
+        if cursor.fetchone()[0] == 0:
+            _seed_default_settings(conn)
+        
         cursor.execute("SELECT setting_value FROM user_settings WHERE setting_key = ?", (key,))
         result = cursor.fetchone()
         conn.close()
