@@ -124,8 +124,17 @@
     /* Settings Modal */
     .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
          background: var(--bg-modal-overlay); display: flex; align-items: center; justify-content: center; z-index: 1000; }
-    .modal-content { background: var(--bg-modal); border-radius: 12px; max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto;
-         box-shadow: 0 20px 25px rgba(59,130,246,0.10); color: var(--text-main); }
+    .modal-content {
+  background: var(--bg-modal);
+  border-radius: 12px;
+  max-width: 500px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 25px rgba(59,130,246,0.10);
+  color: var(--text-main);
+  margin: auto;
+}
     .modal-header { background: var(--bg-header); color: #fff; padding: 16px; font-weight: 700; font-size: 1.1rem;
         border-radius: 12px 12px 0 0; display: flex; justify-content: space-between; align-items: center; }
     .modal-close { background: none; border: none; color: #fff; font-size: 1.5rem; cursor: pointer; }
@@ -175,17 +184,15 @@
 <body>
 
 <header>
-  <div style="display: flex; align-items: center; justify-content: space-between; gap: 0;">
-      <div style="display: flex; flex-direction: column; gap: 0;">
-        <div style="display: flex; align-items: center; justify-content: space-between;">
-          <h1 style="font-size: 1.3rem;">Daily Digest</h1>
-          <button id="settings-btn" title="Settings" aria-label="Settings">⚙️</button>
-        </div>
-        <div style="display: flex; align-items: center; margin-top: 2px;">
-          <p id="hdate" style="margin-right: 8px;"></p>
-          <button id="refresh-btn" title="Refresh Pipeline" aria-label="Refresh Pipeline">⟳</button>
-        </div>
-      </div>
+  <div style="display: flex; flex-direction: column; gap: 0; width: 100%;">
+    <div style="display: flex; align-items: center; width: 100%;">
+      <h1 style="font-size: 1.3rem; flex: 1;">Daily Digest</h1>
+      <button id="settings-btn" title="Settings" aria-label="Settings" style="margin-left: auto;">⚙️</button>
+    </div>
+    <div style="display: flex; align-items: center; margin-top: 2px;">
+      <p id="hdate" style="margin-right: 8px;"></p>
+      <button id="refresh-btn" title="Refresh Pipeline" aria-label="Refresh Pipeline">⟳</button>
+    </div>
   </div>
 </header>
 
