@@ -67,14 +67,6 @@ fi
 git push origin main 2>/dev/null || true
 log_success "Local changes pushed to GitHub"
 
-# Step 0b: Sync database file to server (not in git)
-log_info "Step 0b: Syncing database file to server..."
-if [ -f "reddit_posts.db" ]; then
-    scp reddit_posts.db "Server@server:/Users/server/mediastack/Reddit_LLM/reddit_posts.db" 2>/dev/null && log_success "Database file synced" || log_warning "Database sync skipped"
-else
-    log_warning "reddit_posts.db not found locally, skipping sync"
-fi
-
 
 # Step 1: Clone or update repository
 log_info "Step 1: Cloning/updating repository..."
@@ -103,6 +95,14 @@ ssh "$SERVER_HOST" bash << 'EOF'
 EOF
 
 log_success "Repository cloned/updated"
+
+# Step 1b: Sync database file to server (must be after git reset!)
+log_info "Step 1b: Syncing database file to server (after git reset)..."
+if [ -f "reddit_posts.db" ]; then
+    scp reddit_posts.db "Server@server:/Users/server/mediastack/Reddit_LLM/reddit_posts.db" 2>/dev/null && log_success "Database file synced" || log_warning "Database sync skipped"
+else
+    log_warning "reddit_posts.db not found locally, skipping sync"
+fi
 
 # Step 2: Verify Dockerfile exists
 log_info "Step 2: Verifying Dockerfile..."
