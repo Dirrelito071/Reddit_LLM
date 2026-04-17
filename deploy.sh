@@ -96,8 +96,8 @@ EOF
 
 log_success "Dockerfile verified"
 
-# Step 3: Use docker-compose from the mediastack directory to rebuild ONLY reddit-llm
-log_info "Step 3: Building Docker image (this may take a few minutes)..."
+# Step 3: Clean old image and rebuild
+log_info "Step 3: Cleaning old image and rebuilding..."
 
 ssh "$SERVER_HOST" bash << 'EOF'
     SERVER_PATH="/Users/server/mediastack"
@@ -106,19 +106,22 @@ ssh "$SERVER_HOST" bash << 'EOF'
     
     cd "$REDDIT_LLM_DIR"
     
-    # Build only the reddit-news-server service with --no-cache to get latest code
-    # Uses Dockerfile in current Reddit_LLM directory and docker-compose from mediastack
-    echo "[SERVER] Building reddit-llm image..."
-    $DOCKER_CMD compose -f "$SERVER_PATH/docker-compose.yaml" -f ./docker-compose.override.yaml build --no-cache reddit-news-server 2>&1 | tail -20
+    # Remove old reddit-llm image to force complete rebuild
+    echo "[SERVER] Removing old reddit-llm image..."
+    $DOCKER_CMD rmi reddit-llm:latest 2>&1 || true
     
-    # Alternative: build directly using Dockerfile if compose fails
-    if [ $? -ne 0 ]; then
-        echo "[SERVER] Compose build failed, trying direct docker build..."
-        $DOCKER_CMD build --no-cache -t reddit-llm:latest -f ./Dockerfile . 2>&1 | tail -20
-    fi
+    # Also clean build cache
+    echo "[SERVER] Cleaning Docker build cache..."
+    $DOCKER_CMD builder prune -af --filter "label!=keep" 2>&1 || true
+    
+    # Build directly using Dockerfile with --no-cache (most reliable)
+    echo "[SERVER] Building reddit-llm image from Dockerfile..."
+    $DOCKER_CMD build --no-cache -t reddit-llm:latest -f ./Dockerfile . 2>&1 | tail -30
     
     if [ $? -eq 0 ]; then
         echo "[SERVER] Build successful ✓"
+        echo "[SERVER] Verifying image was created..."
+        $DOCKER_CMD images reddit-llm:latest
     else
         echo "[SERVER] Build failed!"
         exit 1
@@ -178,12 +181,14 @@ ssh "$SERVER_HOST" bash << 'EOF'
     
     # Check if user_settings table creation code exists
     if $DOCKER_CMD exec reddit-news-server test -f /app/db.py; then
-        if $DOCKER_CMD exec reddit-news-server grep -q "user_settings" /app/db.py; then
-            echo "[SERVER] ✓ Settings panel code found in db.py"
+        echo "[SERVER] db.py found, checking for user_settings..."
+        SETTINGS_COUNT=$($DOCKER_CMD exec reddit-news-server grep -c "user_settings" /app/db.py || echo "0")
+        if [ "$SETTINGS_COUNT" -gt 0 ]; then
+            echo "[SERVER] ✓ Settings panel code found ($SETTINGS_COUNT occurrences in db.py)"
         else
-            echo "[SERVER] WARNING: db.py exists but user_settings not found"
-            echo "[SERVER] Checking file contents..."
-            $DOCKER_CMD exec reddit-news-server head -60 /app/db.py | tail -10
+            echo "[SERVER] ERROR: user_settings not found in db.py"
+            echo "[SERVER] First 80 lines of db.py:"
+            $DOCKER_CMD exec reddit-news-server head -80 /app/db.py
             exit 1
         fi
     else
@@ -191,16 +196,11 @@ ssh "$SERVER_HOST" bash << 'EOF'
         exit 1
     fi
     
-    # Check if news-digest.html has Settings button
-    if $DOCKER_CMD exec reddit-news-server test -f /app/news-digest.html; then
-        if $DOCKER_CMD exec reddit-news-server grep -q "settings-btn" /app/news-digest.html; then
-            echo "[SERVER] ✓ Settings UI found in news-digest.html"
-        else
-            echo "[SERVER] WARNING: news-digest.html exists but settings-btn not found"
-            echo "[SERVER] This may be expected if using news-server2.py"
-        fi
+    # Verify news-server2.py exists
+    if $DOCKER_CMD exec reddit-news-server test -f /app/news-server2.py; then
+        echo "[SERVER] ✓ news-server2.py found"
     else
-        echo "[SERVER] Note: news-digest.html not found (may be served from news-server2.py)"
+        echo "[SERVER] WARNING: news-server2.py not found"
     fi
     
     echo "[SERVER] Deployment verification complete!"
