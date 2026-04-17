@@ -385,20 +385,7 @@
     });
   }
 
-  // Button click handler
-  document.getElementById('pipeline-btn').addEventListener('click', async () => {
-    try {
-      const response = await fetch('/api/run', { method: 'POST' });
-      const data = await response.json();
-      if (data.started) {
-        console.log('Pipeline started');
-      } else if (data.error) {
-        alert('Error: ' + data.error);
-      }
-    } catch (err) {
-      alert('Failed to start pipeline: ' + err);
-    }
-  });
+
 
   // Initialize tabs from first status fetch
   fetch('/api/status')
