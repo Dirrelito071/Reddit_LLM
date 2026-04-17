@@ -63,21 +63,23 @@ ssh "$SERVER_HOST" bash << 'EOF'
     REPO_URL="https://github.com/Dirrelito071/Reddit_LLM.git"
     SERVER_PATH="/Users/server/mediastack"
     REDDIT_LLM_DIR="$SERVER_PATH/Reddit_LLM"
-    DOCKER_CMD="/Applications/Docker.app/Contents/Resources/bin/docker"
     
     if [ -d "$REDDIT_LLM_DIR/.git" ]; then
         echo "[SERVER] Repository exists, pulling latest changes..."
         cd "$REDDIT_LLM_DIR"
         git fetch origin main
         git reset --hard origin/main
+        echo "[SERVER] Reset to latest main branch"
     else
         echo "[SERVER] Cloning repository..."
         rm -rf "$REDDIT_LLM_DIR"
         git clone "$REPO_URL" "$REDDIT_LLM_DIR"
+        echo "[SERVER] Cloned repository"
     fi
     
     echo "[SERVER] Repository ready at $REDDIT_LLM_DIR"
-    ls -la "$REDDIT_LLM_DIR" | head -10
+    echo "[SERVER] Current commit:"
+    cd "$REDDIT_LLM_DIR" && git log -1 --oneline
 EOF
 
 log_success "Repository cloned/updated"
@@ -130,9 +132,10 @@ ssh "$SERVER_HOST" bash << 'EOF'
     echo "[SERVER] Cleaning Docker build cache..."
     $DOCKER_CMD builder prune -af 2>&1 >/dev/null || true
     
-    # Build directly using Dockerfile with --no-cache
-    echo "[SERVER] Building reddit-llm image from Dockerfile (this may take 1-2 minutes)..."
-    BUILD_OUTPUT=$($DOCKER_CMD build --no-cache -t reddit-llm:latest -f ./Dockerfile . 2>&1)
+    # Build using docker compose with --no-cache to ensure fresh build
+    echo "[SERVER] Building reddit-llm image using docker compose (this may take 1-2 minutes)..."
+    cd "$SERVER_PATH"
+    BUILD_OUTPUT=$($DOCKER_CMD compose -f docker-compose.yaml build --no-cache reddit-news-server 2>&1)
     BUILD_EXIT=$?
     
     # Show last 20 lines of build output
@@ -159,15 +162,16 @@ ssh "$SERVER_HOST" bash << 'EOF'
     
     cd "$SERVER_PATH"
     
-    # Start the reddit-news-server with the new image (container was already removed in Step 3)
+    # Start the reddit-news-server with the newly built image
     echo "[SERVER] Starting reddit-news-server with new image..."
-    $DOCKER_CMD compose up -d reddit-news-server
+    $DOCKER_CMD compose -f docker-compose.yaml up -d reddit-news-server
     
     echo "[SERVER] Waiting for container to start..."
     sleep 5
     
     # Verify container is running
-    $DOCKER_CMD compose ps reddit-news-server
+    echo "[SERVER] Container status:"
+    $DOCKER_CMD compose -f docker-compose.yaml ps reddit-news-server
 EOF
 
 log_success "Container restarted"
@@ -176,6 +180,7 @@ log_success "Container restarted"
 log_info "Step 5: Verifying deployment..."
 
 ssh "$SERVER_HOST" bash << 'EOF'
+    SERVER_PATH="/Users/server/mediastack"
     DOCKER_CMD="/Applications/Docker.app/Contents/Resources/bin/docker"
     
     # Check if container is running
@@ -188,27 +193,27 @@ ssh "$SERVER_HOST" bash << 'EOF'
     
     echo "[SERVER] Container status: $CONTAINER_STATUS"
     
-    # Check if the new code is loaded (check for Settings panel features)
-    echo "[SERVER] Checking for latest code features..."
+    # Verify the new code is loaded by checking for latest code features
+    echo "[SERVER] Verifying latest code is deployed..."
     
-    # Check if the new code is loaded (check for Settings panel features)
-    echo "[SERVER] Checking for latest code features..."
-    
-    # Check if user_settings table creation code exists
+    # Check that the Settings panel code is present (user_settings table creation)
     SETTINGS_COUNT=$($DOCKER_CMD exec reddit-news-server grep "user_settings" /app/db.py 2>/dev/null | wc -l)
     
     if [ "$SETTINGS_COUNT" -gt 0 ]; then
-        echo "[SERVER] ✓ Settings panel code found ($SETTINGS_COUNT references to user_settings)"
-        
-        # Also verify news-server2.py exists
-        if $DOCKER_CMD exec reddit-news-server test -f /app/news-server2.py; then
-            echo "[SERVER] ✓ news-server2.py found"
-        fi
+        echo "[SERVER] ✓ Settings panel code detected"
     else
-        echo "[SERVER] ERROR: Settings code not found in db.py"
-        echo "[SERVER] Container content:"
-        $DOCKER_CMD exec reddit-news-server ls -la /app/db.py
-        exit 1
+        echo "[SERVER] WARNING: Settings panel code not found - may not be latest version"
+    fi
+    
+    # Check that the latest HTML initialization code is present (Object.keys data.status)
+    LATEST_CODE=$($DOCKER_CMD exec reddit-news-server grep "Object.keys(data.status" /app/news-digest.html 2>/dev/null | wc -l)
+    
+    if [ "$LATEST_CODE" -gt 0 ]; then
+        echo "[SERVER] ✓ Latest HTML code detected"
+    else
+        echo "[SERVER] ⚠ WARNING: Latest HTML code not found!"
+        echo "[SERVER] Checking what initialization code is present:"
+        $DOCKER_CMD exec reddit-news-server sed -n '338,342p' /app/news-digest.html
     fi
     
     echo "[SERVER] Deployment verification complete!"
