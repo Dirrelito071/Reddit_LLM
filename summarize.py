@@ -104,7 +104,7 @@ for (subreddit,) in subreddits:
             errors += 1
     
     # Mark as ready when done
-    db.update_progress(subreddit, "ready", 100, len(posts))
+    db.update_progress(subreddit, "ready", 100, len(posts_to_process))
     print(f"  Summary: {processed} processed, {skipped} skipped, {errors} errors\n")
     
     total_processed += processed
