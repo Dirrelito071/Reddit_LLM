@@ -67,6 +67,16 @@ fi
 git push origin main 2>/dev/null || true
 log_success "Local changes pushed to GitHub"
 
+# Step 0b: Sync database file to server (not in git)
+log_info "Step 0b: Syncing database file to server..."
+if [ -f "reddit_posts.db" ]; then
+    scp reddit_posts.db "$SERVER_HOST:$SERVER_PATH/Reddit_LLM/reddit_posts.db" 2>/dev/null || log_warning "Database sync skipped (file may not exist on server)"
+    log_success "Database file synced"
+else
+    log_warning "reddit_posts.db not found locally, skipping sync"
+fi
+
+
 # Step 1: Clone or update repository
 log_info "Step 1: Cloning/updating repository..."
 
