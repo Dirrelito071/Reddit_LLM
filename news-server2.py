@@ -369,8 +369,7 @@ if __name__ == "__main__":
     db.init_db()
     db.init_progress()
 
-    # Set up scheduling state
-    global last_run_time, next_run_time
+    # Set up scheduling state (no global statement needed at module level)
     now = datetime.datetime.utcnow()
     last_run_time = None
     next_run_time = get_next_run_time(now)
