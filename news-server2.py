@@ -42,12 +42,13 @@ def get_next_run_time(now=None):
         now = datetime.datetime.utcnow()
     # Fixed boundaries: 00:00, 06:00, 12:00, 18:00 UTC
     boundaries = [0, 6, 12, 18]
-    next_times = [
-        now.replace(hour=h, minute=0, second=0, microsecond=0) + (datetime.timedelta(days=1) if h <= now.hour else datetime.timedelta())
-        for h in boundaries
-    ]
-    next_time = min(t for t in next_times if t > now)
-    return next_time
+    # Find the next boundary strictly after 'now'
+    for h in boundaries:
+        candidate = now.replace(hour=h, minute=0, second=0, microsecond=0)
+        if candidate > now:
+            return candidate
+    # If none found, it's after 18:00, so next is 00:00 next day
+    return (now + datetime.timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
 
 # Background scheduler thread
 def scheduler_loop():
