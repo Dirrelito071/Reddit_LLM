@@ -321,7 +321,8 @@
   function skeleton() {
     return '<div class="card"><div class="sk" style="width:70%"></div><div class="sk"></div><div class="sk" style="width:85%"></div></div>'.repeat(5);
   }
-
+            const score = a.score || 0;
+            const tabsContainer = document.getElementById('tabs-container');
   function renderNews(cat, articles) {
     document.getElementById('pane-' + cat).innerHTML = articles.length
       ? articles.map(a => {
