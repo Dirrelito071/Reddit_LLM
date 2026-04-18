@@ -40,14 +40,19 @@ import datetime
 def get_next_run_time(now=None):
     if now is None:
         now = datetime.datetime.utcnow()
-    # Scheduled at 0, 6, 12, 18 UTC
+    # Find the next 6-hour boundary strictly after 'now'
     hour = now.hour
     next_hour = ((hour // 6) + 1) * 6
     if next_hour >= 24:
-        # Next day
+        # Next day at 00:00
         next_time = now.replace(hour=0, minute=0, second=0, microsecond=0) + datetime.timedelta(days=1)
     else:
         next_time = now.replace(hour=next_hour, minute=0, second=0, microsecond=0)
+    # If we're exactly on a boundary, skip to the next one
+    if next_time <= now:
+        next_time += datetime.timedelta(hours=6)
+        if next_time.hour >= 24:
+            next_time = next_time.replace(hour=0) + datetime.timedelta(days=1)
     return next_time
 
 # Background scheduler thread
