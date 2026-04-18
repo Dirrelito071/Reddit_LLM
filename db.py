@@ -1,3 +1,15 @@
+def purge_old_posts(subreddit, days=7):
+    """Delete posts older than N days for a subreddit."""
+    import time
+    cutoff = time.time() - days * 86400
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute(
+        "DELETE FROM posts WHERE subreddit = ? AND created_utc < ?",
+        (subreddit, cutoff)
+    )
+    conn.commit()
+    conn.close()
 def mark_all_unprocessed(subreddit):
     """Set status='unprocessed' for all posts in a subreddit."""
     conn = sqlite3.connect(DB_PATH)

@@ -48,6 +48,8 @@ for subreddit in subreddits_to_process:
     print(f"Processing r/{subreddit}...")
     print(f"{'=' * 80}")
 
+    # Step 0: Purge old posts (older than 7 days)
+    db.purge_old_posts(subreddit)
     # Step 1: Mark all as unprocessed
     db.mark_all_unprocessed(subreddit)
     db.update_progress(subreddit, "collecting", 0, 0, subphase="rss", current=0, total=25)
@@ -142,11 +144,15 @@ for subreddit in subreddits_to_process:
     unprocessed = db.get_unprocessed_posts(subreddit)
     total_unprocessed = len(unprocessed)
     for idx, (post_id, old_json) in enumerate(unprocessed, 1):
-        db.update_progress(subreddit, "collecting", int(idx/total_unprocessed*100) if total_unprocessed else 100, 0, subphase="unprocessed", current=idx, total=total_unprocessed)
-
-    # Step 3: Process unprocessed posts
-    unprocessed = db.get_unprocessed_posts(subreddit)
-    for idx, (post_id, old_json) in enumerate(unprocessed, 1):
+        db.update_progress(
+            subreddit,
+            "collecting",
+            int(idx/total_unprocessed*100) if total_unprocessed else 100,
+            0,
+            subphase="unprocessed",
+            current=idx,
+            total=total_unprocessed
+        )
         # Fetch latest JSON
         # Try to reconstruct the post URL from DB if needed (not shown here)
         # We'll assume we can get the permalink from the DB if needed
