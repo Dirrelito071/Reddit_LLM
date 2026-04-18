@@ -29,8 +29,41 @@ logger = logging.getLogger(__name__)
 DB_PATH = "reddit_posts.db"
 PORT = 8000
 
-# Global flag for pipeline execution
+
+# Global flags and scheduling state
 pipeline_running = False
+last_run_time = None  # ISO string
+next_run_time = None  # ISO string
+
+# Scheduler: compute next 6-hour interval (UTC)
+import datetime
+def get_next_run_time(now=None):
+    if now is None:
+        now = datetime.datetime.utcnow()
+    # Scheduled at 0, 6, 12, 18 UTC
+    hour = now.hour
+    next_hour = ((hour // 6) + 1) * 6
+    if next_hour >= 24:
+        # Next day
+        next_time = now.replace(hour=0, minute=0, second=0, microsecond=0) + datetime.timedelta(days=1)
+    else:
+        next_time = now.replace(hour=next_hour, minute=0, second=0, microsecond=0)
+    return next_time
+
+# Background scheduler thread
+def scheduler_loop():
+    global pipeline_running, last_run_time, next_run_time
+    while True:
+        now = datetime.datetime.utcnow()
+        if next_run_time is None or now >= next_run_time:
+            if not pipeline_running:
+                # Start pipeline in background
+                threading.Thread(target=run_pipeline, daemon=True).start()
+                last_run_time = now.replace(microsecond=0).isoformat() + 'Z'
+            # Compute next run
+            next_run_time = get_next_run_time(now)
+        # Sleep until next check (1 min)
+        time.sleep(60)
 
 
 class NewsHandler(BaseHTTPRequestHandler):
@@ -76,13 +109,11 @@ class NewsHandler(BaseHTTPRequestHandler):
             self.send_error(404, f"File not found: {filename}")
     
     def serve_status(self):
-        """Return status for each subreddit + running flag"""
+        """Return status for each subreddit + running flag, last/next run times"""
         status = {}
-
         try:
             progress = db.get_progress()
-            subreddits = db.get_subreddits()  # Load from DB (user settings or defaults)
-
+            subreddits = db.get_subreddits()
             for subreddit in subreddits:
                 if subreddit in progress:
                     p = progress[subreddit]
@@ -93,12 +124,8 @@ class NewsHandler(BaseHTTPRequestHandler):
                     total = p.get("total", 0)
                     total_posts = p.get("total_posts", 0)
                     last_updated = p.get("last_updated")
-
-                    # Convert UTC timestamp to ISO format with Z suffix for JavaScript
                     if last_updated:
                         last_updated = last_updated + "Z" if not last_updated.endswith("Z") else last_updated
-
-                    # Label logic for two-phase progress
                     if phase == "collecting":
                         if subphase == "rss":
                             label = f"RSS {current}/{total}"
@@ -112,7 +139,6 @@ class NewsHandler(BaseHTTPRequestHandler):
                         label = f"{total_posts}/{total_posts}"
                     else:
                         label = "—"
-
                     status[subreddit] = {
                         "phase": phase,
                         "subphase": subphase,
@@ -136,15 +162,17 @@ class NewsHandler(BaseHTTPRequestHandler):
             logger.error(f"Error querying status: {e}")
             subreddits = db.get_subreddits()
             status = {sr: {"phase": "error", "pct": 0, "label": "Error", "last_updated": None} for sr in subreddits}
-        
-        # Add running flag, subreddits list, and LLM question
+
+        # Add running flag, subreddits list, LLM question, and schedule times
         subreddits = db.get_subreddits()
         llm_question = db.get_llm_question()
         response = {
             "running": pipeline_running,
             "subreddits": subreddits,
             "llm_question": llm_question,
-            "status": status
+            "status": status,
+            "last_run_time": last_run_time,
+            "next_run_time": next_run_time.isoformat() + 'Z' if next_run_time else None
         }
         self.send_json(response)
     
@@ -158,15 +186,14 @@ class NewsHandler(BaseHTTPRequestHandler):
             subreddits = db.get_subreddits()  # Load from DB (user settings or defaults)
             
             for subreddit in subreddits:
-                # Get top 5 posts with summaries and engagement data
+                # Get top 5 posts with summaries and engagement data, including updated_at
                 cursor.execute("""
-                    SELECT title, summary, url, COALESCE(score, 0), COALESCE(num_comments, 0), previous_score
+                    SELECT title, summary, url, COALESCE(score, 0), COALESCE(num_comments, 0), previous_score, updated_at
                     FROM posts
                     WHERE subreddit = ?
                     ORDER BY score DESC
                     LIMIT 5
                 """, (subreddit,))
-                
                 posts = cursor.fetchall()
                 news[subreddit] = [
                     {
@@ -175,7 +202,8 @@ class NewsHandler(BaseHTTPRequestHandler):
                         "link": post[2],
                         "score": post[3],
                         "num_comments": post[4],
-                        "previous_score": post[5]
+                        "previous_score": post[5],
+                        "updated_at": (post[6] + 'Z') if post[6] and not post[6].endswith('Z') else post[6]
                     }
                     for post in posts
                 ]
@@ -340,7 +368,16 @@ if __name__ == "__main__":
     # Initialize database
     db.init_db()
     db.init_progress()
-    
+
+    # Set up scheduling state
+    global last_run_time, next_run_time
+    now = datetime.datetime.utcnow()
+    last_run_time = None
+    next_run_time = get_next_run_time(now)
+
+    # Start scheduler thread
+    threading.Thread(target=scheduler_loop, daemon=True).start()
+
     logger.info("=" * 80)
     logger.info("NEWS DIGEST SERVER - Reddit Edition with Pipeline Orchestration")
     logger.info("=" * 80)
@@ -351,7 +388,7 @@ if __name__ == "__main__":
     logger.info("\nClick 'Start Pipeline' button to begin collection and summarization")
     logger.info("Press Ctrl+C to stop")
     logger.info("=" * 80 + "\n")
-    
+
     try:
         with HTTPServer(("0.0.0.0", PORT), NewsHandler) as httpd:
             httpd.serve_forever()

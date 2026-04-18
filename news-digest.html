@@ -193,6 +193,10 @@
       <p id="hdate" style="margin-right: 8px;"></p>
       <button id="refresh-btn" title="Refresh Pipeline" aria-label="Refresh Pipeline">⟳</button>
     </div>
+    <div style="margin-top: 2px; font-size: 0.85rem; color: var(--text-meta); min-height: 18px;">
+      <span id="last-run-time"></span><br>
+      <span id="next-run-time"></span>
+    </div>
   </div>
 </header>
 
@@ -310,17 +314,25 @@
               indicator = '↓';
             }
           }
-          
+
           const score = a.score || 0;
           const comments = a.num_comments || 0;
-          const titleLink = a.link && a.link !== '#' 
+          const titleLink = a.link && a.link !== '#'
             ? `<a href="${esc(a.link)}" target="_blank" rel="noopener">${indicator} ${esc(a.title)}</a>`
             : `${indicator} ${esc(a.title)}`;
-          
+
+          // Format summary refreshed time
+          let refreshed = '';
+          if (a.updated_at) {
+            const d = new Date(a.updated_at);
+            refreshed = `<div class='meta' style='margin-top:2px;'>Summarized: ${d.toLocaleString('en-GB', {hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short', year: 'numeric'})}</div>`;
+          }
+
           return `<div class="card">
             <div class="meta">${cat}</div>
             <h3>${titleLink}</h3>
             <p>${esc(a.summary)}</p>
+            ${refreshed}
             <div class="meta" style="margin-top:8px">Score: ${score} | Comments: ${comments}</div>
           </div>`;
         }).join('')
@@ -394,6 +406,26 @@
 
 
 
+  // Update last/next run time display
+  function updateRunTimes(data) {
+    const last = data.last_run_time;
+    const next = data.next_run_time;
+    const lastEl = document.getElementById('last-run-time');
+    const nextEl = document.getElementById('next-run-time');
+    if (last) {
+      const d = new Date(last);
+      lastEl.textContent = `Last run: ${d.toLocaleString('en-GB', {hour: '2-digit', minute: '2-digit', second: '2-digit', day: 'numeric', month: 'short', year: 'numeric'})}`;
+    } else {
+      lastEl.textContent = '';
+    }
+    if (next) {
+      const d = new Date(next);
+      nextEl.textContent = `Next scheduled: ${d.toLocaleString('en-GB', {hour: '2-digit', minute: '2-digit', second: '2-digit', day: 'numeric', month: 'short', year: 'numeric'})}`;
+    } else {
+      nextEl.textContent = '';
+    }
+  }
+
   // Initialize tabs from first status fetch
   fetch('/api/status')
     .then(r => r.json())
@@ -402,6 +434,7 @@
       const subreddits = Object.keys(data.status || {});
       initializeTabs(subreddits);
       applyStatus(data);
+      updateRunTimes(data);
     })
     .catch(() => {
       const e = document.getElementById('err');
@@ -412,7 +445,7 @@
   // Poll for status updates
   setInterval(() =>
     fetch('/api/status')
-      .then(r => r.json()).then(applyStatus)
+      .then(r => r.json()).then(data => { applyStatus(data); updateRunTimes(data); })
       .catch(() => {
         const e = document.getElementById('err');
         e.style.display = 'block';
