@@ -1,3 +1,45 @@
+def mark_all_unprocessed(subreddit):
+    """Set status='unprocessed' for all posts in a subreddit."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE posts SET status = 'unprocessed' WHERE subreddit = ?
+    """, (subreddit,))
+    conn.commit()
+    conn.close()
+
+def update_post_status(post_id, status, json_data=None, metrics=None):
+    """
+    Update status (and optionally json_data, score, num_comments, upvote_ratio) for a post.
+    metrics: dict with keys 'score', 'num_comments', 'upvote_ratio' (optional)
+    """
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    if json_data is not None and metrics is not None:
+        cursor.execute("""
+            UPDATE posts SET status = ?, json_data = ?, score = ?, num_comments = ?, upvote_ratio = ?, updated_at = CURRENT_TIMESTAMP WHERE post_id = ?
+        """, (status, json.dumps(json_data), metrics.get('score'), metrics.get('num_comments'), metrics.get('upvote_ratio'), post_id))
+    elif json_data is not None:
+        cursor.execute("""
+            UPDATE posts SET status = ?, json_data = ?, updated_at = CURRENT_TIMESTAMP WHERE post_id = ?
+        """, (status, json.dumps(json_data), post_id))
+    else:
+        cursor.execute("""
+            UPDATE posts SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE post_id = ?
+        """, (status, post_id))
+    conn.commit()
+    conn.close()
+
+def get_unprocessed_posts(subreddit):
+    """Return list of (post_id, json_data) for posts with status='unprocessed' in subreddit."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT post_id, json_data FROM posts WHERE subreddit = ? AND status = 'unprocessed'
+    """, (subreddit,))
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
 """
 Database layer - Store Reddit posts in SQLite
 """

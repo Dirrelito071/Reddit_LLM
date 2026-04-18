@@ -42,14 +42,16 @@ print("✓ Database initialized\n")
 
 # Process each subreddit
 for subreddit in subreddits_to_process:
+
     print(f"{'=' * 80}")
     print(f"Processing r/{subreddit}...")
     print(f"{'=' * 80}")
-    
-    # Update progress: collecting phase starting
+
+    # Step 1: Mark all as unprocessed
+    db.mark_all_unprocessed(subreddit)
     db.update_progress(subreddit, "collecting", 0, 0)
-    
-    # Fetch RSS feed
+
+    # Step 2: Process latest 25 from RSS
     url = config.REDDIT_RSS_URL.format(subreddit=subreddit)
     try:
         response = requests.get(url, headers={"User-Agent": config.USER_AGENT}, timeout=config.REQUEST_TIMEOUT)
@@ -58,41 +60,32 @@ for subreddit in subreddits_to_process:
     except Exception as e:
         print(f"  ✗ Error fetching RSS: {e}\n")
         continue
-    
+
     if not feed.entries:
         print(f"  ✗ No posts found\n")
         continue
-    
-    # Process posts (25 limit from RSS)
+
     new_count = 0
     refreshed_count = 0
-    unchanged_count = 0
+    stale_count = 0
     error_count = 0
-    
+
     for i, entry in enumerate(feed.entries[:25], 1):
         post_url = entry.link
         title = entry.title[:60] + "..." if len(entry.title) > 60 else entry.title
-        
-        # Extract post ID from URL
         post_id = post_url.split('/comments/')[1].split('/')[0] if '/comments/' in post_url else None
-        
         if not post_id:
             print(f"  [{i}/25] ✗ Could not extract post ID")
             error_count += 1
             continue
-        
-        # Fetch JSON API data
+
         api_url = post_url.rstrip('/') + '.json'
         try:
             api_response = requests.get(api_url, headers={"User-Agent": config.USER_AGENT}, timeout=config.REQUEST_TIMEOUT)
             api_response.raise_for_status()
             api_data = api_response.json()
-            
-            # Extract post data
             if isinstance(api_data, list) and len(api_data) > 0:
                 post_data = api_data[0]['data']['children'][0]['data']
-                
-                # Prepare storage data
                 store_data = {
                     'id': post_id,
                     'subreddit': subreddit,
@@ -104,40 +97,93 @@ for subreddit in subreddits_to_process:
                     'url': post_url,
                     'created_utc': post_data.get('created_utc'),
                 }
-                
-                # Store or update in database
-                result = db.store_or_update_post(store_data, api_data)
-                
-                # Update progress
-                pct = int((i / 25) * 100)
-                db.update_progress(subreddit, "collecting", pct, i)
-                
-                if result == "new":
+                # Check if post exists
+                conn = db.sqlite3.connect(db.DB_PATH)
+                cursor = conn.cursor()
+                cursor.execute("SELECT json_data FROM posts WHERE post_id = ?", (post_id,))
+                row = cursor.fetchone()
+                conn.close()
+                if row is None:
+                    # New post
+                    db.store_or_update_post(store_data, api_data)
+                    db.update_post_status(post_id, "new", api_data, {
+                        'score': store_data['score'],
+                        'num_comments': store_data['num_comments'],
+                        'upvote_ratio': store_data['upvote_ratio']
+                    })
                     print(f"  [{i}/25] ✓ New: {title} ({store_data['score']} pts)")
                     new_count += 1
-                elif result == "refreshed":
-                    print(f"  [{i}/25] ↻ Refreshed: {title} ({store_data['score']} pts, {store_data['num_comments']} comments)")
-                    refreshed_count += 1
-                elif result == "updated":
-                    # Score changed but comments didn't - no re-summarization needed
-                    print(f"  [{i}/25] ↑ Updated: {title} ({store_data['score']} pts)")
-                    unchanged_count += 1  # Count as unchanged for summary purposes
-                elif result == "unchanged":
-                    print(f"  [{i}/25] ⊘ Unchanged: {title}")
-                    unchanged_count += 1
                 else:
-                    print(f"  [{i}/25] ✗ Failed to store")
-                    error_count += 1
+                    old_json = row[0]
+                    if json.dumps(api_data, sort_keys=True) == old_json:
+                        db.update_post_status(post_id, "stale")
+                        print(f"  [{i}/25] ⊘ Stale: {title}")
+                        stale_count += 1
+                    else:
+                        db.update_post_status(post_id, "refreshed", api_data, {
+                            'score': store_data['score'],
+                            'num_comments': store_data['num_comments'],
+                            'upvote_ratio': store_data['upvote_ratio']
+                        })
+                        print(f"  [{i}/25] ↻ Refreshed: {title} ({store_data['score']} pts, {store_data['num_comments']} comments)")
+                        refreshed_count += 1
             else:
                 print(f"  [{i}/25] ✗ Invalid API response")
                 error_count += 1
-                
         except Exception as e:
             print(f"  [{i}/25] ✗ Error: {str(e)[:50]}")
             error_count += 1
-    
-    # Summary
-    print(f"\n  Summary: {new_count} new, {refreshed_count} refreshed, {unchanged_count} unchanged, {error_count} errors")
+
+    # Step 3: Process unprocessed posts
+    unprocessed = db.get_unprocessed_posts(subreddit)
+    for idx, (post_id, old_json) in enumerate(unprocessed, 1):
+        # Fetch latest JSON
+        # Try to reconstruct the post URL from DB if needed (not shown here)
+        # We'll assume we can get the permalink from the DB if needed
+        # For now, skip if we can't reconstruct
+        try:
+            # Get permalink from DB
+            conn = db.sqlite3.connect(db.DB_PATH)
+            cursor = conn.cursor()
+            cursor.execute("SELECT url FROM posts WHERE post_id = ?", (post_id,))
+            row = cursor.fetchone()
+            conn.close()
+            if not row:
+                continue
+            post_url = row[0]
+            api_url = post_url.rstrip('/') + '.json'
+            api_response = requests.get(api_url, headers={"User-Agent": config.USER_AGENT}, timeout=config.REQUEST_TIMEOUT)
+            api_response.raise_for_status()
+            api_data = api_response.json()
+            if isinstance(api_data, list) and len(api_data) > 0:
+                post_data = api_data[0]['data']['children'][0]['data']
+                store_data = {
+                    'id': post_id,
+                    'subreddit': subreddit,
+                    'title': post_data.get('title'),
+                    'author': post_data.get('author'),
+                    'score': post_data.get('score'),
+                    'upvote_ratio': post_data.get('upvote_ratio'),
+                    'num_comments': post_data.get('num_comments'),
+                    'url': post_url,
+                    'created_utc': post_data.get('created_utc'),
+                }
+                if json.dumps(api_data, sort_keys=True) == old_json:
+                    db.update_post_status(post_id, "stale")
+                    print(f"  [U{idx}] ⊘ Stale: {store_data['title']}")
+                else:
+                    db.update_post_status(post_id, "refreshed", api_data, {
+                        'score': store_data['score'],
+                        'num_comments': store_data['num_comments'],
+                        'upvote_ratio': store_data['upvote_ratio']
+                    })
+                    print(f"  [U{idx}] ↻ Refreshed: {store_data['title']} ({store_data['score']} pts, {store_data['num_comments']} comments)")
+            else:
+                print(f"  [U{idx}] ✗ Invalid API response for unprocessed post")
+        except Exception as e:
+            print(f"  [U{idx}] ✗ Error: {str(e)[:50]}")
+
+    print(f"\n  Summary: {new_count} new, {refreshed_count} refreshed, {stale_count} stale, {error_count} errors")
     print()
 
 # Final stats
