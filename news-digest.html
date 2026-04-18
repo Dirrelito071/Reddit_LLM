@@ -193,8 +193,7 @@
       <p id="hdate" style="margin-right: 8px;"></p>
       <button id="refresh-btn" title="Refresh Pipeline" aria-label="Refresh Pipeline">⟳</button>
     </div>
-    <div style="margin-top: 2px; font-size: 0.85rem; color: var(--text-meta); min-height: 18px;">
-      <span id="last-run-time"></span><br>
+    <div style="margin-top: 2px; font-size: 0.95rem; color: var(--text-meta); min-height: 18px;">
       <span id="next-run-time"></span>
     </div>
   </div>
@@ -406,18 +405,10 @@
 
 
 
-  // Update last/next run time display
+  // Update next run time display only
   function updateRunTimes(data) {
-    const last = data.last_run_time;
     const next = data.next_run_time;
-    const lastEl = document.getElementById('last-run-time');
     const nextEl = document.getElementById('next-run-time');
-    if (last) {
-      const d = new Date(last);
-      lastEl.textContent = `Last run: ${d.toLocaleString('en-GB', {hour: '2-digit', minute: '2-digit', second: '2-digit', day: 'numeric', month: 'short', year: 'numeric'})}`;
-    } else {
-      lastEl.textContent = '';
-    }
     if (next) {
       const d = new Date(next);
       nextEl.textContent = `Next scheduled: ${d.toLocaleString('en-GB', {hour: '2-digit', minute: '2-digit', second: '2-digit', day: 'numeric', month: 'short', year: 'numeric'})}`;
