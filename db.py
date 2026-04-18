@@ -25,8 +25,8 @@ def update_post_status(post_id, status, json_data=None, metrics=None):
     Update status (and optionally json_data, score, num_comments, upvote_ratio) for a post.
     metrics: dict with keys 'score', 'num_comments', 'upvote_ratio' (optional)
     """
-    import datetime
-    now_local = datetime.datetime.now().isoformat(sep=' ', timespec='seconds')
+    import time, datetime
+    now_local = datetime.datetime.fromtimestamp(time.time()).isoformat(sep=' ', timespec='seconds')
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     if json_data is not None and metrics is not None:
