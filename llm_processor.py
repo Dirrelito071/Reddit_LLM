@@ -112,7 +112,10 @@ def process_post(post_id, custom_question=None):
         
         # Use custom question if provided, otherwise use default
         question_to_use = custom_question if custom_question else QUESTION
-        
+
+        # Log the question being used
+        print(f"  LLM QUESTION: {question_to_use}")
+
         # Call LLM
         print(f"  Calling LLM for: {title[:60]}...")
         summary = call_ollama(question_to_use, context)
