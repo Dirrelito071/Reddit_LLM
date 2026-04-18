@@ -400,13 +400,16 @@
 
 
 
-  // Update next run time display only
+  // Update next run time display in short format: Next HH:MM (DD Mon)
   function updateRunTimes(data) {
     const next = data.next_run_time;
     const nextEl = document.getElementById('next-run-time');
     if (next) {
       const d = new Date(next);
-      nextEl.textContent = `Next scheduled: ${d.toLocaleString('en-GB', {hour: '2-digit', minute: '2-digit', second: '2-digit', day: 'numeric', month: 'short', year: 'numeric'})}`;
+      const hhmm = d.toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit', hour12: false});
+      const day = d.getDate();
+      const month = d.toLocaleString('en-GB', {month: 'short'});
+      nextEl.textContent = `Next ${hhmm} (${day} ${month})`;
     } else {
       nextEl.textContent = '';
     }
