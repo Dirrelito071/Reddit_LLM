@@ -81,7 +81,7 @@ for (subreddit,) in subreddits:
         
         # Update progress before processing (shows current post being worked on)
         pct = int(((i - 1) / len(posts_to_process)) * 100)
-        db.update_progress(subreddit, "summarizing", pct, len(posts_to_process))
+        db.update_progress(subreddit, "summarizing", pct, len(posts_to_process), current=i-1, total=len(posts_to_process))
         
         post_start = time.time()
         print(f"  [{i}/{len(posts_to_process)}] Processing: {short_title}")
@@ -91,7 +91,7 @@ for (subreddit,) in subreddits:
         
         # Update progress after each post completes
         pct = int((i / len(posts_to_process)) * 100)
-        db.update_progress(subreddit, "summarizing", pct, len(posts_to_process))
+        db.update_progress(subreddit, "summarizing", pct, len(posts_to_process), current=i, total=len(posts_to_process))
         
         if result is True:
             print(f"       ✓ Summarized ({elapsed:.1f}s)\n")
@@ -104,7 +104,7 @@ for (subreddit,) in subreddits:
             errors += 1
     
     # Mark as ready when done
-    db.update_progress(subreddit, "ready", 100, len(posts_to_process))
+    db.update_progress(subreddit, "ready", 100, len(posts_to_process), current=len(posts_to_process), total=len(posts_to_process))
     print(f"  Summary: {processed} processed, {skipped} skipped, {errors} errors\n")
     
     total_processed += processed
