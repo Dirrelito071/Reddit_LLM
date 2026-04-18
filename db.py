@@ -25,20 +25,22 @@ def update_post_status(post_id, status, json_data=None, metrics=None):
     Update status (and optionally json_data, score, num_comments, upvote_ratio) for a post.
     metrics: dict with keys 'score', 'num_comments', 'upvote_ratio' (optional)
     """
+    import datetime
+    now_local = datetime.datetime.now().isoformat(sep=' ', timespec='seconds')
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     if json_data is not None and metrics is not None:
         cursor.execute("""
-            UPDATE posts SET status = ?, json_data = ?, score = ?, num_comments = ?, upvote_ratio = ?, updated_at = CURRENT_TIMESTAMP WHERE post_id = ?
-        """, (status, json.dumps(json_data), metrics.get('score'), metrics.get('num_comments'), metrics.get('upvote_ratio'), post_id))
+            UPDATE posts SET status = ?, json_data = ?, score = ?, num_comments = ?, upvote_ratio = ?, updated_at = ? WHERE post_id = ?
+        """, (status, json.dumps(json_data), metrics.get('score'), metrics.get('num_comments'), metrics.get('upvote_ratio'), now_local, post_id))
     elif json_data is not None:
         cursor.execute("""
-            UPDATE posts SET status = ?, json_data = ?, updated_at = CURRENT_TIMESTAMP WHERE post_id = ?
-        """, (status, json.dumps(json_data), post_id))
+            UPDATE posts SET status = ?, json_data = ?, updated_at = ? WHERE post_id = ?
+        """, (status, json.dumps(json_data), now_local, post_id))
     else:
         cursor.execute("""
-            UPDATE posts SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE post_id = ?
-        """, (status, post_id))
+            UPDATE posts SET status = ?, updated_at = ? WHERE post_id = ?
+        """, (status, now_local, post_id))
     conn.commit()
     conn.close()
 
