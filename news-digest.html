@@ -384,7 +384,11 @@
       
       // Create pane
       const pane = document.createElement('div');
-      pane.className = idx === 0 ? 'pane on' : 'pane';
+      if (idx === 0) {
+        pane.className = 'pane on';
+      } else {
+        pane.className = 'pane';
+      }
       pane.setAttribute('data-pane', sr);
       pane.id = 'pane-' + sr;
       pane.innerHTML = skeleton();
@@ -405,7 +409,12 @@
       const s = statusMap[cat];
       const tab = document.querySelector(`.tab[data-cat="${cat}"]`);
       if (!tab) return;
-      tab.className = `tab${tab.classList.contains('active')?' active':''} phase-${s.phase}`;
+      let tabClass = 'tab';
+      if (tab.classList.contains('active')) {
+        tabClass += ' active';
+      }
+      tabClass += ` phase-${s.phase}`;
+      tab.className = tabClass;
       document.getElementById('bar-' + cat).style.width = s.pct + '%';
       document.getElementById('lbl-' + cat).textContent = s.label;
       document.getElementById('bdg-' + cat).textContent = s.phase;
