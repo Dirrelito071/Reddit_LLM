@@ -124,13 +124,14 @@ def process_post(post_id, custom_question=None):
             conn.close()
             return False
         
-        # Update DB
+        # Update DB with local time for updated_at
+        import datetime, time
+        now_local = datetime.datetime.fromtimestamp(time.time()).isoformat(sep=' ', timespec='seconds')
         cursor.execute("""
             UPDATE posts 
-            SET summary = ?, status = 'summarized', updated_at = CURRENT_TIMESTAMP
+            SET summary = ?, status = 'summarized', updated_at = ?
             WHERE post_id = ?
-        """, (summary, post_id))
-        
+        """, (summary, now_local, post_id))
         conn.commit()
         conn.close()
         

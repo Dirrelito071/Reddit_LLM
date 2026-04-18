@@ -98,7 +98,7 @@ html, body {
     .tabs { display: flex; gap: 10px; padding: 12px 16px; background: var(--bg-tabs);
       border-bottom: 1px solid var(--border-main); overflow-x: auto; }
     .tab  { flex-shrink: 0; min-width: 140px; padding: 10px 12px 8px;
-      border-radius: 12px; border: 1.5px solid transparent;
+      border-radius: 12px; border: 1.5px solid var(--border-main); outline: 1.5px solid var(--border-main); outline-offset: -2px;
       background: var(--bg-card); cursor: pointer; text-align: left; color: var(--text-main); }
     .tab .name  { font-size: 0.85rem; font-weight: 700; margin-bottom: 6px; }
     .tab .info  { display: flex; justify-content: space-between;
@@ -115,6 +115,7 @@ html, body {
     .phase-ready      .badge { background: var(--badge-ready); color: var(--accent-green); }
 
     .tab.active { border-color: var(--accent-blue); background: var(--bg-tab-active); box-shadow: 0 2px 8px rgba(59, 130, 246, 0.18); }
+  .tab.active { outline: 2px solid var(--accent-blue); outline-offset: -2px; }
 
     /* Main */
     main { max-width: 660px; margin: 0 auto; padding: 16px 12px 32px; }
