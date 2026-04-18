@@ -39,8 +39,8 @@ next_run_time = None  # ISO string
 import datetime
 def get_next_run_time(now=None):
     if now is None:
-        now = datetime.datetime.utcnow()
-    # Fixed boundaries: 00:00, 06:00, 12:00, 18:00 UTC
+        now = datetime.datetime.now()
+    # Fixed boundaries: 00:00, 06:00, 12:00, 18:00 (local time)
     boundaries = [0, 6, 12, 18]
     # Find the next boundary strictly after 'now'
     for h in boundaries:
@@ -54,12 +54,12 @@ def get_next_run_time(now=None):
 def scheduler_loop():
     global pipeline_running, last_run_time, next_run_time
     while True:
-        now = datetime.datetime.utcnow()
+        now = datetime.datetime.now()
         if next_run_time is None or now >= next_run_time:
             if not pipeline_running:
                 # Start pipeline in background
                 threading.Thread(target=run_pipeline, daemon=True).start()
-                last_run_time = now.replace(microsecond=0).isoformat() + 'Z'
+                last_run_time = now.replace(microsecond=0).isoformat()
             # Compute next run
             next_run_time = get_next_run_time(now)
         # Sleep until next check (1 min)
@@ -172,7 +172,7 @@ class NewsHandler(BaseHTTPRequestHandler):
             "llm_question": llm_question,
             "status": status,
             "last_run_time": last_run_time,
-            "next_run_time": next_run_time.isoformat() + 'Z' if next_run_time else None
+            "next_run_time": next_run_time.isoformat() if next_run_time else None
         }
         self.send_json(response)
     
@@ -203,7 +203,7 @@ class NewsHandler(BaseHTTPRequestHandler):
                         "score": post[3],
                         "num_comments": post[4],
                         "previous_score": post[5],
-                        "updated_at": (post[6] + 'Z') if post[6] and not post[6].endswith('Z') else post[6]
+                        "updated_at": post[6]
                     }
                     for post in posts
                 ]
@@ -370,7 +370,7 @@ if __name__ == "__main__":
     db.init_progress()
 
     # Set up scheduling state (no global statement needed at module level)
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now()
     last_run_time = None
     next_run_time = get_next_run_time(now)
 
