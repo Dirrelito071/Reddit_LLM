@@ -78,44 +78,57 @@ class NewsHandler(BaseHTTPRequestHandler):
     def serve_status(self):
         """Return status for each subreddit + running flag"""
         status = {}
-        
+
         try:
             progress = db.get_progress()
             subreddits = db.get_subreddits()  # Load from DB (user settings or defaults)
-            
+
             for subreddit in subreddits:
                 if subreddit in progress:
                     p = progress[subreddit]
                     phase = p["phase"]
+                    subphase = p.get("subphase")
                     pct = p["pct"]
-                    total = p["total_posts"]
+                    current = p.get("current", 0)
+                    total = p.get("total", 0)
+                    total_posts = p.get("total_posts", 0)
                     last_updated = p.get("last_updated")
-                    
+
                     # Convert UTC timestamp to ISO format with Z suffix for JavaScript
                     if last_updated:
                         last_updated = last_updated + "Z" if not last_updated.endswith("Z") else last_updated
-                    
+
+                    # Label logic for two-phase progress
                     if phase == "collecting":
-                        current = int((pct / 100) * 25) if pct > 0 else 0
-                        label = f"{current}/25"
+                        if subphase == "rss":
+                            label = f"RSS {current}/{total}"
+                        elif subphase == "unprocessed":
+                            label = f"Unprocessed {current}/{total}"
+                        else:
+                            label = f"{current}/{total}"
                     elif phase == "summarizing":
-                        current = int((pct / 100) * total) if pct > 0 else 0
-                        label = f"{current}/{total}"
+                        label = f"Summarizing {current}/{total}"
                     elif phase == "ready":
-                        label = f"{total}/{total}"
+                        label = f"{total_posts}/{total_posts}"
                     else:
                         label = "—"
-                    
+
                     status[subreddit] = {
                         "phase": phase,
+                        "subphase": subphase,
                         "pct": pct,
+                        "current": current,
+                        "total": total,
                         "label": label,
                         "last_updated": last_updated
                     }
                 else:
                     status[subreddit] = {
                         "phase": "idle",
+                        "subphase": None,
                         "pct": 0,
+                        "current": 0,
+                        "total": 0,
                         "label": "—",
                         "last_updated": None
                     }

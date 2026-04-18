@@ -49,7 +49,7 @@ for subreddit in subreddits_to_process:
 
     # Step 1: Mark all as unprocessed
     db.mark_all_unprocessed(subreddit)
-    db.update_progress(subreddit, "collecting", 0, 0)
+    db.update_progress(subreddit, "collecting", 0, 0, subphase="rss", current=0, total=25)
 
     # Step 2: Process latest 25 from RSS
     url = config.REDDIT_RSS_URL.format(subreddit=subreddit)
@@ -71,6 +71,7 @@ for subreddit in subreddits_to_process:
     error_count = 0
 
     for i, entry in enumerate(feed.entries[:25], 1):
+        db.update_progress(subreddit, "collecting", int(i/25*100), 0, subphase="rss", current=i, total=25)
         post_url = entry.link
         title = entry.title[:60] + "..." if len(entry.title) > 60 else entry.title
         post_id = post_url.split('/comments/')[1].split('/')[0] if '/comments/' in post_url else None
@@ -136,6 +137,12 @@ for subreddit in subreddits_to_process:
 
     # Step 3: Process unprocessed posts
     unprocessed = db.get_unprocessed_posts(subreddit)
+    total_unprocessed = len(unprocessed)
+    for idx, (post_id, old_json) in enumerate(unprocessed, 1):
+        db.update_progress(subreddit, "collecting", int(idx/total_unprocessed*100) if total_unprocessed else 100, 0, subphase="unprocessed", current=idx, total=total_unprocessed)
+
+    # Step 3: Process unprocessed posts
+    unprocessed = db.get_unprocessed_posts(subreddit)
     for idx, (post_id, old_json) in enumerate(unprocessed, 1):
         # Fetch latest JSON
         # Try to reconstruct the post URL from DB if needed (not shown here)
@@ -182,6 +189,9 @@ for subreddit in subreddits_to_process:
                 print(f"  [U{idx}] ✗ Invalid API response for unprocessed post")
         except Exception as e:
             print(f"  [U{idx}] ✗ Error: {str(e)[:50]}")
+
+    # Mark collecting phase as done
+    db.update_progress(subreddit, "collecting", 100, 0, subphase="unprocessed", current=total_unprocessed, total=total_unprocessed)
 
     print(f"\n  Summary: {new_count} new, {refreshed_count} refreshed, {stale_count} stale, {error_count} errors")
     print()

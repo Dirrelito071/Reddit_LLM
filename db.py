@@ -295,18 +295,28 @@ def init_progress():
         CREATE TABLE IF NOT EXISTS progress (
             subreddit TEXT PRIMARY KEY,
             phase TEXT DEFAULT 'idle',
+            subphase TEXT DEFAULT NULL,
             pct INTEGER DEFAULT 0,
+            current INTEGER DEFAULT 0,
+            total INTEGER DEFAULT 0,
             total_posts INTEGER DEFAULT 0,
             last_updated TIMESTAMP DEFAULT NULL
         )
     """)
-    
-    # Migration: Add last_updated column if it doesn't exist
-    try:
-        cursor.execute("ALTER TABLE progress ADD COLUMN last_updated TIMESTAMP DEFAULT NULL")
-    except:
-        pass  # Column already exists
-    
+
+    # Migration: Add new columns if they don't exist
+    migrations = [
+        ("ALTER TABLE progress ADD COLUMN last_updated TIMESTAMP DEFAULT NULL", "last_updated"),
+        ("ALTER TABLE progress ADD COLUMN subphase TEXT DEFAULT NULL", "subphase"),
+        ("ALTER TABLE progress ADD COLUMN current INTEGER DEFAULT 0", "current"),
+        ("ALTER TABLE progress ADD COLUMN total INTEGER DEFAULT 0", "total"),
+    ]
+    for sql, col in migrations:
+        try:
+            cursor.execute(sql)
+        except Exception:
+            pass  # Column already exists
+
     conn.commit()
     conn.close()
 
@@ -322,28 +332,28 @@ def reset_progress():
     conn.close()
 
 
-def update_progress(subreddit, phase, pct, total_posts=0):
-    """Update progress for a subreddit"""
+def update_progress(subreddit, phase, pct, total_posts=0, subphase=None, current=0, total=0):
+    """Update progress for a subreddit, supporting subphase and step counts"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    
+
     # If phase is 'ready', record the timestamp
     if phase == "ready":
         cursor.execute("""
-            INSERT OR REPLACE INTO progress (subreddit, phase, pct, total_posts, last_updated)
-            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-        """, (subreddit, phase, pct, total_posts))
+            INSERT OR REPLACE INTO progress (subreddit, phase, subphase, pct, current, total, total_posts, last_updated)
+            VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        """, (subreddit, phase, subphase, pct, current, total, total_posts))
     else:
         # Get current last_updated to preserve existing timestamp
         cursor.execute("SELECT last_updated FROM progress WHERE subreddit = ?", (subreddit,))
         result = cursor.fetchone()
         last_updated = result[0] if result else None
-        
+
         cursor.execute("""
-            INSERT OR REPLACE INTO progress (subreddit, phase, pct, total_posts, last_updated)
-            VALUES (?, ?, ?, ?, ?)
-        """, (subreddit, phase, pct, total_posts, last_updated))
-    
+            INSERT OR REPLACE INTO progress (subreddit, phase, subphase, pct, current, total, total_posts, last_updated)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (subreddit, phase, subphase, pct, current, total, total_posts, last_updated))
+
     conn.commit()
     conn.close()
 
@@ -353,19 +363,22 @@ def get_progress():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
-    cursor.execute("SELECT subreddit, phase, pct, total_posts, last_updated FROM progress ORDER BY subreddit")
+    cursor.execute("SELECT subreddit, phase, subphase, pct, current, total, total_posts, last_updated FROM progress ORDER BY subreddit")
     rows = cursor.fetchall()
     conn.close()
-    
+
     progress = {}
-    for subreddit, phase, pct, total_posts, last_updated in rows:
+    for subreddit, phase, subphase, pct, current, total, total_posts, last_updated in rows:
         progress[subreddit] = {
             "phase": phase,
+            "subphase": subphase,
             "pct": pct,
+            "current": current,
+            "total": total,
             "total_posts": total_posts,
             "last_updated": last_updated
         }
-    
+
     return progress
 
 
