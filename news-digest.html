@@ -43,6 +43,8 @@
           top: 64px; /* height of header */
           z-index: 8;
           background: var(--bg-tabs);
+          max-width: 660px;
+          margin: 0 auto;
         }
         .tabs {
           display: flex; gap: 10px; padding: 12px 16px; background: var(--bg-tabs);
@@ -74,7 +76,7 @@
     .tab.active { border-color: var(--accent-blue); background: var(--bg-tab-active); box-shadow: 0 2px 8px rgba(59, 130, 246, 0.18); }
 
     /* Main */
-    main { max-width: 660px; margin: 0 auto; padding: 16px 12px 32px; }
+    main { max-width: 660px; margin: 0 auto; padding: 0 12px 32px; height: calc(100vh - 64px - 56px); overflow-y: auto; }
     .pane { display: none; }
     .pane.on { display: block; }
 
@@ -193,83 +195,30 @@
 </head>
 <body>
 
-<header>
-  <div style="display: flex; flex-direction: column; gap: 0; width: 100%;">
-    <div style="display: flex; align-items: center; width: 100%;">
-      <h1 style="font-size: 1.3rem; flex: 1;">Daily Digest</h1>
-      <button id="settings-btn" title="Settings" aria-label="Settings" style="margin-left: auto;">⚙️</button>
-    </div>
-    <div style="display: flex; align-items: center; margin-top: 2px; font-size: 0.95rem; color: var(--text-meta); min-height: 18px;">
-      <span id="next-run-time" style="margin-right: 8px;"></span>
-      <button id="refresh-btn" title="Refresh Pipeline" aria-label="Refresh Pipeline">⟳</button>
-    </div>
-  </div>
-</header>
-
-<!-- Settings Modal -->
-<div id="settings-modal" class="modal-overlay" style="display:none">
-  <div class="modal-content">
-    <div class="modal-header">
-      Settings
-      <button class="modal-close" id="settings-close">&times;</button>
-    </div>
-    
-    <div class="settings-tabs">
-      <button class="settings-tab active" data-tab="subreddits">Subreddits</button>
-      <button class="settings-tab" data-tab="llm">LLM Question</button>
-    </div>
-    
-    <!-- Subreddits Tab -->
-    <div id="tab-subreddits" class="settings-content active">
-      <div class="form-group">
-        <label class="form-label">Monitored Subreddits:</label>
-        <div class="subreddit-list" id="subreddit-list"></div>
-        <p class="info-text">Subreddits currently being monitored</p>
+<div class="page-container">
+  <header>
+    <div style="display: flex; flex-direction: column; gap: 0; width: 100%;">
+      <div style="display: flex; align-items: center; width: 100%;">
+        <h1 style="font-size: 1.3rem; flex: 1;">Daily Digest</h1>
+        <button id="settings-btn" title="Settings" aria-label="Settings" style="margin-left: auto;">⚙️</button>
       </div>
-      
-      <div class="form-group">
-        <label class="form-label">Add new subreddit:</label>
-        <div class="add-subreddit">
-          <input type="text" id="subreddit-input" class="form-input" placeholder="e.g., programming" />
-          <button id="subreddit-add-btn">+ Add</button>
-        </div>
-        <p class="info-text">ⓘ Minimum 1 subreddit required</p>
+      <div style="display: flex; align-items: center; margin-top: 2px; font-size: 0.95rem; color: var(--text-meta); min-height: 18px;">
+        <span id="next-run-time" style="margin-right: 8px;"></span>
+        <button id="refresh-btn" title="Refresh Pipeline" aria-label="Refresh Pipeline">⟳</button>
       </div>
     </div>
-    
-    <!-- LLM Question Tab -->
-    <div id="tab-llm" class="settings-content">
-      <div class="form-group">
-        <label class="form-label">LLM Question (used for summarization):</label>
-        <textarea id="llm-question" class="form-input" placeholder="Enter your question..."></textarea>
-        <p class="info-text">This question will be asked to the LLM for summarizing posts</p>
-      </div>
-    </div>
-    
-    <div id="settings-error" style="display:none; color: #f44336; padding: 10px; margin: 10px 0; background: #ffebee; border-radius: 4px; font-size: 14px;"></div>
-    
-    <div class="modal-buttons">
-      <button class="modal-save" id="settings-save">Save</button>
-      <button class="modal-cancel" id="settings-cancel">Cancel</button>
+  </header>
+  <div class="sticky-tabs-wrapper">
+    <div class="tabs" id="tabs-container">
+      <!-- Dynamically generated from /api/status -->
     </div>
   </div>
+  <main class="main-scroll">
+    <div id="panes-container">
+      <!-- Dynamically generated panes -->
+    </div>
+  </main>
 </div>
-
-<div id="err"></div>
-
-<div class="sticky-tabs-wrapper">
-  <div class="tabs" id="tabs-container">
-    <!-- Dynamically generated from /api/status -->
-  </div>
-</div>
-  <!-- Dynamically generated from /api/status -->
-</div>
-
-<main style="max-width: 660px; margin: 0 auto; padding: 0 12px 32px; height: calc(100vh - 64px - 56px); overflow-y: auto;">
-  <div id="panes-container">
-    <!-- Dynamically generated panes -->
-  </div>
-</main>
 
 <script>
   const CATS = [];  // Will be populated from API
