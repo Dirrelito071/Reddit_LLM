@@ -406,10 +406,11 @@
     const nextEl = document.getElementById('next-run-time');
     if (next) {
       const d = new Date(next);
-      const hhmm = d.toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit', hour12: false});
-      const day = d.getDate();
-      const month = d.toLocaleString('en-GB', {month: 'short'});
-      nextEl.textContent = `Next ${hhmm} (${day} ${month})`;
+      // Always display in UTC
+      const hhmm = d.toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC'});
+      const day = d.getUTCDate();
+      const month = d.toLocaleString('en-GB', {month: 'short', timeZone: 'UTC'});
+      nextEl.textContent = `Next ${hhmm} (${day} ${month}) UTC`;
     } else {
       nextEl.textContent = '';
     }
