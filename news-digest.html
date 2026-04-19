@@ -5,6 +5,32 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Daily Digest</title>
 <style>
+        /* Visual feedback for swipe drag */
+        .pane-dragging {
+          box-shadow: 0 8px 32px 0 rgba(60,60,100,0.18), 0 1.5px 0 #232946;
+          transform: scale(0.97);
+          z-index: 2;
+          transition: box-shadow 0.18s, transform 0.18s;
+        }
+    /* Swipe Animation for Panes */
+    .pane {
+      transition: transform 0.32s cubic-bezier(.4,1.2,.4,1);
+      will-change: transform;
+    }
+    .pane-slide-left {
+      animation: slideLeft 0.32s forwards;
+    }
+    .pane-slide-right {
+      animation: slideRight 0.32s forwards;
+    }
+    @keyframes slideLeft {
+      from { transform: translateX(0); }
+      to { transform: translateX(-100%); }
+    }
+    @keyframes slideRight {
+      from { transform: translateX(0); }
+      to { transform: translateX(100%); }
+    }
 
 html, body {
   height: 100%;
@@ -326,6 +352,82 @@ html, body {
 </main>
 
 <script>
+    // --- Swipe Navigation for Panes ---
+    (function() {
+      const panesContainer = document.getElementById('panes-container');
+      let touchStartX = 0, touchStartY = 0, touchEndX = 0, touchEndY = 0;
+      let isSwiping = false;
+      let animating = false;
+      function getActiveIndex() {
+        const tabs = Array.from(document.querySelectorAll('.tab'));
+        return tabs.findIndex(tab => tab.classList.contains('active'));
+      }
+      function switchToIndex(newIdx, direction) {
+        if (animating) return;
+        const tabs = Array.from(document.querySelectorAll('.tab'));
+        const panes = Array.from(document.querySelectorAll('.pane'));
+        const oldIdx = getActiveIndex();
+        if (oldIdx === newIdx) return;
+        animating = true;
+        // Animate outgoing pane
+        panes[oldIdx].classList.remove('on', 'pane-dragging');
+        panes[oldIdx].classList.remove('pane-slide-left', 'pane-slide-right');
+        panes[oldIdx].classList.add(direction === 'left' ? 'pane-slide-left' : 'pane-slide-right');
+        // Animate incoming pane
+        panes[newIdx].classList.remove('pane-slide-left', 'pane-slide-right', 'pane-dragging');
+        panes[newIdx].classList.add('on');
+        // Remove animation classes after transition
+        setTimeout(() => {
+          panes[oldIdx].classList.remove('pane-slide-left', 'pane-slide-right');
+          animating = false;
+        }, 340);
+        // Update tab highlight
+        tabs.forEach(tab => tab.classList.remove('active'));
+        tabs[newIdx].classList.add('active');
+      }
+      panesContainer.addEventListener('touchstart', function(e) {
+        if (animating) return;
+        if (e.touches.length !== 1) return;
+        isSwiping = true;
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+        // Add visual feedback
+        const panes = Array.from(document.querySelectorAll('.pane'));
+        const idx = getActiveIndex();
+        panes[idx].classList.add('pane-dragging');
+      });
+      panesContainer.addEventListener('touchmove', function(e) {
+        if (!isSwiping) return;
+        touchEndX = e.touches[0].clientX;
+        touchEndY = e.touches[0].clientY;
+      });
+      function clearDragEffect() {
+        const panes = Array.from(document.querySelectorAll('.pane'));
+        panes.forEach(pane => pane.classList.remove('pane-dragging'));
+      }
+      panesContainer.addEventListener('touchend', function(e) {
+        if (!isSwiping) return;
+        isSwiping = false;
+        clearDragEffect();
+        const dx = touchEndX - touchStartX;
+        const dy = touchEndY - touchStartY;
+        if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy)) return; // threshold & horizontal only
+        const tabs = Array.from(document.querySelectorAll('.tab'));
+        const n = tabs.length;
+        let idx = getActiveIndex();
+        let newIdx;
+        if (dx < 0) {
+          // Swipe left: next tab (loop)
+          newIdx = (idx + 1) % n;
+          switchToIndex(newIdx, 'left');
+        } else if (dx > 0) {
+          // Swipe right: prev tab (loop)
+          newIdx = (idx - 1 + n) % n;
+          switchToIndex(newIdx, 'right');
+        }
+      });
+      panesContainer.addEventListener('touchcancel', clearDragEffect);
+    })();
   const CATS = [];  // Will be populated from API
   const prev = {};
 
