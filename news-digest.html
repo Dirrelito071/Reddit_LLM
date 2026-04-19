@@ -113,8 +113,24 @@ html, body {
     }
     #panes-container {
       flex: 1;
-      overflow-y: auto;
+      overflow: hidden;
       min-height: 0;
+      position: relative;
+    }
+    .panes-track {
+      display: flex;
+      height: 100%;
+      width: 100%;
+      transition: transform 0.32s cubic-bezier(.4,1.2,.4,1);
+      will-change: transform;
+    }
+    .pane {
+      flex: 0 0 100%;
+      min-width: 100%;
+      max-width: 100%;
+      height: 100%;
+      display: block;
+      /* transition: none by default, handled by .panes-track */
     }
 
     header { background: var(--bg-header); color: #fff; padding: 16px; position: sticky; top: 0; z-index: 9; }
@@ -285,7 +301,9 @@ html, body {
 
   <main>
     <div id="panes-container">
-      <!-- Dynamically generated panes -->
+      <div class="panes-track" id="panes-track">
+        <!-- Dynamically generated panes -->
+      </div>
     </div>
   </main>
 </div>
@@ -362,6 +380,19 @@ html, body {
         const tabs = Array.from(document.querySelectorAll('.tab'));
         return tabs.findIndex(tab => tab.classList.contains('active'));
       }
+      function scrollTabIntoCenter(tab) {
+        const tabsContainer = document.getElementById('tabs-container');
+        if (!tab || !tabsContainer) return;
+        const tabRect = tab.getBoundingClientRect();
+        const containerRect = tabsContainer.getBoundingClientRect();
+        // Calculate the scrollLeft needed to center the tab
+        const tabCenter = tabRect.left + tabRect.width / 2;
+        const containerCenter = containerRect.left + containerRect.width / 2;
+        const scrollOffset = tabCenter - containerCenter;
+        // Animate scroll
+        tabsContainer.scrollBy({ left: scrollOffset, behavior: 'smooth' });
+      }
+
       function switchToIndex(newIdx, direction) {
         if (animating) return;
         const tabs = Array.from(document.querySelectorAll('.tab'));
@@ -384,6 +415,8 @@ html, body {
         // Update tab highlight
         tabs.forEach(tab => tab.classList.remove('active'));
         tabs[newIdx].classList.add('active');
+        // Scroll the selected tab into center
+        scrollTabIntoCenter(tabs[newIdx]);
       }
       panesContainer.addEventListener('touchstart', function(e) {
         if (animating) return;
@@ -451,11 +484,23 @@ html, body {
     }
   });
 
+  function scrollTabIntoCenter(tab) {
+    const tabsContainer = document.getElementById('tabs-container');
+    if (!tab || !tabsContainer) return;
+    const tabRect = tab.getBoundingClientRect();
+    const containerRect = tabsContainer.getBoundingClientRect();
+    const tabCenter = tabRect.left + tabRect.width / 2;
+    const containerCenter = containerRect.left + containerRect.width / 2;
+    const scrollOffset = tabCenter - containerCenter;
+    tabsContainer.scrollBy({ left: scrollOffset, behavior: 'smooth' });
+  }
+
   function show(cat, btn) {
     document.querySelectorAll('.pane').forEach(p => p.classList.remove('on'));
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     document.getElementById('pane-' + cat).classList.add('on');
     btn.classList.add('active');
+    scrollTabIntoCenter(btn);
   }
 
   function esc(s) {
@@ -506,13 +551,20 @@ html, body {
   function initializeTabs(subreddits) {
     const tabsContainer = document.getElementById('tabs-container');
     const panesContainer = document.getElementById('panes-container');
-    
+    let panesTrack = document.getElementById('panes-track');
+    if (!panesTrack) {
+      panesTrack = document.createElement('div');
+      panesTrack.className = 'panes-track';
+      panesTrack.id = 'panes-track';
+      panesContainer.innerHTML = '';
+      panesContainer.appendChild(panesTrack);
+    } else {
+      panesTrack.innerHTML = '';
+    }
     tabsContainer.innerHTML = '';
-    panesContainer.innerHTML = '';
-    
+    CATS.length = 0;
     subreddits.forEach((sr, idx) => {
       CATS.push(sr);
-      
       // Create tab button
       const tab = document.createElement('button');
       tab.className = idx === 0 ? 'tab active' : 'tab';
@@ -525,15 +577,17 @@ html, body {
         <div style="font-size: 0.65rem; color: #666; margin-top: 4px;" id="ts-${sr}"></div>
       `;
       tabsContainer.appendChild(tab);
-      
       // Create pane
       const pane = document.createElement('div');
-      pane.className = idx === 0 ? 'pane on' : 'pane';
+      pane.className = 'pane';
       pane.setAttribute('data-pane', sr);
       pane.id = 'pane-' + sr;
       pane.innerHTML = skeleton();
-      panesContainer.appendChild(pane);
+      panesTrack.appendChild(pane);
     });
+    // Set initial transform
+    panesTrack.style.transform = 'translateX(0)';
+    panesTrack.style.transition = '';
   }
 
   function applyStatus(data) {
@@ -689,96 +743,115 @@ html, body {
   async function loadCurrentSettings() {
     try {
       const response = await fetch('/api/status');
-      const data = await response.json();
-
-      // Load subreddits
-      const subreddits = data.subreddits || [];
-      renderSubredditList(subreddits);
-
-      // Load LLM question
-      const question = data.llm_question || 'Summarize the following Reddit posts';
-      llmQuestion.value = question;
-      clearSettingsError();
-    } catch (error) {
-      console.error('Error loading settings:', error);
-      showSettingsError('Failed to load current settings');
-    }
-  }
-
-  // Render subreddit list
-  function renderSubredditList(subreddits) {
-    subredditList.innerHTML = '';
-    subreddits.forEach(subreddit => {
-      const item = document.createElement('div');
-      item.className = 'subreddit-item';
-      item.innerHTML = `
-        <span>${escapeHtml(subreddit)}</span>
-        <button class="remove-btn" data-subreddit="${escapeHtml(subreddit)}">×</button>
-      `;
-      subredditList.appendChild(item);
-    });
-
-    // Add remove button click handlers
-    document.querySelectorAll('.remove-btn').forEach(btn => {
-      btn.addEventListener('click', function() {
-        const subreddit = this.getAttribute('data-subreddit');
-        removeSubredditFromList(subreddit);
-      });
-    });
-  }
-
-  // Remove subreddit from list (UI only, not saved yet)
-  function removeSubredditFromList(subreddit) {
-    const items = document.querySelectorAll('.subreddit-item');
-    items.forEach(item => {
-      if (item.textContent.trim().startsWith(subreddit)) {
-        item.remove();
-      }
-    });
-  }
-
-  // Add subreddit handler
-  function addSubreddit() {
-    const value = subredditInput.value.trim();
-
-    if (!value) {
-      showSettingsError('Please enter a subreddit name');
-      return;
-    }
-
-    if (value.length > 100) {
-      showSettingsError('Subreddit name too long (max 100 characters)');
-      return;
-    }
-
-    // Check for duplicates
-    const items = document.querySelectorAll('.subreddit-item span');
-    for (let item of items) {
-      if (item.textContent.trim().toLowerCase() === value.toLowerCase()) {
-        showSettingsError('Subreddit already added');
-        return;
-      }
-    }
-
-    // Add to UI list
-    const item = document.createElement('div');
-    item.className = 'subreddit-item';
-    item.innerHTML = `
-      <span>${escapeHtml(value)}</span>
-      <button class="remove-btn" data-subreddit="${escapeHtml(value)}">×</button>
-    `;
-    subredditList.appendChild(item);
-
-    // Add remove handler to new button
-    item.querySelector('.remove-btn').addEventListener('click', function() {
-      const subreddit = this.getAttribute('data-subreddit');
-      removeSubredditFromList(subreddit);
-    });
-
-    subredditInput.value = '';
-    clearSettingsError();
-  }
-
+      // --- Real-Time Swipe/Peek Effect for Panes ---
+      (function() {
+        const panesContainer = document.getElementById('panes-container');
+        const panesTrack = document.getElementById('panes-track');
+        let touchStartX = 0, touchStartY = 0, lastTouchX = 0, lastTouchY = 0;
+        let isDragging = false;
+        let animating = false;
+        let startTranslate = 0;
+        let paneWidth = 0;
+        let activeIdx = 0;
+        let nPanes = 0;
+        function getActiveIndex() {
+          const tabs = Array.from(document.querySelectorAll('.tab'));
+          return tabs.findIndex(tab => tab.classList.contains('active'));
+        }
+        function updatePaneWidth() {
+          paneWidth = panesContainer.offsetWidth;
+        }
+        function setTrackTransition(enable) {
+          panesTrack.style.transition = enable ? 'transform 0.32s cubic-bezier(.4,1.2,.4,1)' : 'none';
+        }
+        function setTrackTranslate(x) {
+          panesTrack.style.transform = `translateX(${x}px)`;
+        }
+        function scrollTabIntoCenter(tab) {
+          const tabsContainer = document.getElementById('tabs-container');
+          if (!tab || !tabsContainer) return;
+          const tabRect = tab.getBoundingClientRect();
+          const containerRect = tabsContainer.getBoundingClientRect();
+          const tabCenter = tabRect.left + tabRect.width / 2;
+          const containerCenter = containerRect.left + containerRect.width / 2;
+          const scrollOffset = tabCenter - containerCenter;
+          tabsContainer.scrollBy({ left: scrollOffset, behavior: 'smooth' });
+        }
+        function switchToIndex(newIdx) {
+          if (animating) return;
+          activeIdx = newIdx;
+          setTrackTransition(true);
+          setTrackTranslate(-activeIdx * paneWidth);
+          animating = true;
+          setTimeout(() => {
+            animating = false;
+          }, 340);
+          // Update tab highlight
+          const tabs = Array.from(document.querySelectorAll('.tab'));
+          tabs.forEach(tab => tab.classList.remove('active'));
+          tabs[newIdx].classList.add('active');
+          scrollTabIntoCenter(tabs[newIdx]);
+        }
+        function onResize() {
+          updatePaneWidth();
+          setTrackTransition(false);
+          setTrackTranslate(-activeIdx * paneWidth);
+        }
+        window.addEventListener('resize', onResize);
+        // Touch events
+        panesContainer.addEventListener('touchstart', function(e) {
+          if (animating) return;
+          if (e.touches.length !== 1) return;
+          isDragging = true;
+          updatePaneWidth();
+          nPanes = panesTrack.children.length;
+          activeIdx = getActiveIndex();
+          touchStartX = lastTouchX = e.touches[0].clientX;
+          touchStartY = lastTouchY = e.touches[0].clientY;
+          startTranslate = -activeIdx * paneWidth;
+          setTrackTransition(false);
+        });
+        panesContainer.addEventListener('touchmove', function(e) {
+          if (!isDragging) return;
+          const touch = e.touches[0];
+          const dx = touch.clientX - touchStartX;
+          const dy = touch.clientY - touchStartY;
+          // Only handle horizontal drags
+          if (Math.abs(dx) > Math.abs(dy)) {
+            e.preventDefault();
+            let offset = startTranslate + dx;
+            // Looping: allow dragging beyond edges, but with resistance
+            if (activeIdx === 0 && dx > 0) offset = startTranslate + dx * 0.3;
+            if (activeIdx === nPanes - 1 && dx < 0) offset = startTranslate + dx * 0.3;
+            setTrackTranslate(offset);
+          }
+          lastTouchX = touch.clientX;
+          lastTouchY = touch.clientY;
+        }, { passive: false });
+        panesContainer.addEventListener('touchend', function(e) {
+          if (!isDragging) return;
+          isDragging = false;
+          const dx = lastTouchX - touchStartX;
+          // Threshold: 30% of pane width
+          let newIdx = activeIdx;
+          if (Math.abs(dx) > paneWidth * 0.3) {
+            if (dx < 0 && activeIdx < nPanes - 1) newIdx = activeIdx + 1;
+            else if (dx > 0 && activeIdx > 0) newIdx = activeIdx - 1;
+          }
+          switchToIndex(newIdx);
+        });
+        panesContainer.addEventListener('touchcancel', function() {
+          if (!isDragging) return;
+          isDragging = false;
+          switchToIndex(activeIdx);
+        });
+        // Initial setup
+        window.addEventListener('DOMContentLoaded', () => {
+          updatePaneWidth();
+          setTrackTransition(false);
+          setTrackTranslate(0);
+        });
+      })();
   // Save all settings
   async function saveSettings() {
     try {
