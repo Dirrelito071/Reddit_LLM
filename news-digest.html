@@ -18,20 +18,7 @@
       transition: transform 0.32s cubic-bezier(.4,1.2,.4,1);
       will-change: transform;
     }
-    .pane-slide-left {
-      animation: slideLeft 0.32s forwards;
-    }
-    .pane-slide-right {
-      animation: slideRight 0.32s forwards;
-    }
-    @keyframes slideLeft {
-      from { transform: translateX(0); }
-      to { transform: translateX(-100%); }
-    }
-    @keyframes slideRight {
-      from { transform: translateX(0); }
-      to { transform: translateX(100%); }
-    }
+
 
 html, body {
   height: 100%;
@@ -114,8 +101,16 @@ html, body {
     }
     #panes-container {
       flex: 1;
-      overflow-y: auto;
+      overflow: hidden;
       min-height: 0;
+      position: relative;
+    }
+    .panes-track {
+      display: flex;
+      height: 100%;
+      width: 100%;
+      transition: transform 0.32s cubic-bezier(.4,1.2,.4,1);
+      will-change: transform;
     }
 
     header { background: var(--bg-header); color: #fff; padding: 16px; position: sticky; top: 0; z-index: 9; }
@@ -148,8 +143,14 @@ html, body {
 
     /* Main */
     main { max-width: 660px; margin: 0 auto; padding: 16px 12px 32px; }
-    .pane { display: none; }
-    .pane.on { display: block; }
+    .pane {
+      flex: 0 0 100%;
+      min-width: 100%;
+      max-width: 100%;
+      height: 100%;
+      display: block;
+      /* transition: none by default, handled by .panes-track */
+    }
 
     /* Cards */
     .card { background: var(--bg-card); border-radius: 12px; padding: 14px; margin-bottom: 10px;
@@ -286,7 +287,9 @@ html, body {
 
   <main>
     <div id="panes-container">
-      <!-- Dynamically generated panes -->
+      <div class="panes-track" id="panes-track">
+        <!-- Dynamically generated panes will be direct children of .panes-track -->
+      </div>
     </div>
   </main>
 </div>
@@ -342,92 +345,124 @@ html, body {
 
 <div id="err"></div>
 
-<div class="tabs" id="tabs-container">
-  <!-- Dynamically generated from /api/status -->
-</div>
 
-<main>
-  <div id="panes-container">
-    <!-- Dynamically generated panes -->
-  </div>
-</main>
 
 <script>
-    // --- Swipe Navigation for Panes ---
+    // --- Real-Time Swipe/Peek Effect for Panes ---
     (function() {
       const panesContainer = document.getElementById('panes-container');
-      let touchStartX = 0, touchStartY = 0, touchEndX = 0, touchEndY = 0;
-      let isSwiping = false;
+      const panesTrack = document.getElementById('panes-track');
+      let touchStartX = 0, touchStartY = 0, lastTouchX = 0, lastTouchY = 0;
+      let isDragging = false;
       let animating = false;
+      let startTranslate = 0;
+      let paneWidth = 0;
+      let activeIdx = 0;
+      let nPanes = 0;
       function getActiveIndex() {
         const tabs = Array.from(document.querySelectorAll('.tab'));
         return tabs.findIndex(tab => tab.classList.contains('active'));
       }
-      function switchToIndex(newIdx, direction) {
+      function updatePaneWidth() {
+        paneWidth = panesContainer.offsetWidth;
+      }
+      function setTrackTransition(enable) {
+        panesTrack.style.transition = enable ? 'transform 0.32s cubic-bezier(.4,1.2,.4,1)' : 'none';
+      }
+      function setTrackTranslate(x) {
+        panesTrack.style.transform = `translateX(${x}px)`;
+      }
+      function scrollTabIntoCenter(tab) {
+        const tabsContainer = document.getElementById('tabs-container');
+        if (!tab || !tabsContainer) return;
+        const tabRect = tab.getBoundingClientRect();
+        const containerRect = tabsContainer.getBoundingClientRect();
+        const tabCenter = tabRect.left + tabRect.width / 2;
+        const containerCenter = containerRect.left + containerRect.width / 2;
+        const scrollOffset = tabCenter - containerCenter;
+        tabsContainer.scrollBy({ left: scrollOffset, behavior: 'smooth' });
+      }
+      function switchToIndex(newIdx) {
         if (animating) return;
-        const tabs = Array.from(document.querySelectorAll('.tab'));
-        const panes = Array.from(document.querySelectorAll('.pane'));
-        const oldIdx = getActiveIndex();
-        if (oldIdx === newIdx) return;
+        activeIdx = newIdx;
+        setTrackTransition(true);
+        setTrackTranslate(-activeIdx * paneWidth);
         animating = true;
-        // Animate outgoing pane
-        panes[oldIdx].classList.remove('on', 'pane-dragging');
-        panes[oldIdx].classList.remove('pane-slide-left', 'pane-slide-right');
-        panes[oldIdx].classList.add(direction === 'left' ? 'pane-slide-left' : 'pane-slide-right');
-        // Animate incoming pane
-        panes[newIdx].classList.remove('pane-slide-left', 'pane-slide-right', 'pane-dragging');
-        panes[newIdx].classList.add('on');
-        // Remove animation classes after transition
         setTimeout(() => {
-          panes[oldIdx].classList.remove('pane-slide-left', 'pane-slide-right');
           animating = false;
         }, 340);
         // Update tab highlight
+        const tabs = Array.from(document.querySelectorAll('.tab'));
         tabs.forEach(tab => tab.classList.remove('active'));
         tabs[newIdx].classList.add('active');
+        scrollTabIntoCenter(tabs[newIdx]);
       }
+      function onResize() {
+        updatePaneWidth();
+        setTrackTransition(false);
+        setTrackTranslate(-activeIdx * paneWidth);
+      }
+      window.addEventListener('resize', onResize);
+      // Touch events
       panesContainer.addEventListener('touchstart', function(e) {
         if (animating) return;
         if (e.touches.length !== 1) return;
-        isSwiping = true;
-        touchStartX = e.touches[0].clientX;
-        touchStartY = e.touches[0].clientY;
-        // Add visual feedback
-        const panes = Array.from(document.querySelectorAll('.pane'));
-        const idx = getActiveIndex();
-        panes[idx].classList.add('pane-dragging');
+        isDragging = true;
+        updatePaneWidth();
+        nPanes = panesTrack.children.length;
+        activeIdx = getActiveIndex();
+        touchStartX = lastTouchX = e.touches[0].clientX;
+        touchStartY = lastTouchY = e.touches[0].clientY;
+        startTranslate = -activeIdx * paneWidth;
+        setTrackTransition(false);
+        // Visual feedback: add .pane-dragging to active pane
+        const panes = panesTrack.children;
+        if (panes[activeIdx]) panes[activeIdx].classList.add('pane-dragging');
       });
       panesContainer.addEventListener('touchmove', function(e) {
-        if (!isSwiping) return;
-        touchEndX = e.touches[0].clientX;
-        touchEndY = e.touches[0].clientY;
-      });
-      function clearDragEffect() {
-        const panes = Array.from(document.querySelectorAll('.pane'));
-        panes.forEach(pane => pane.classList.remove('pane-dragging'));
-      }
-      panesContainer.addEventListener('touchend', function(e) {
-        if (!isSwiping) return;
-        isSwiping = false;
-        clearDragEffect();
-        const dx = touchEndX - touchStartX;
-        const dy = touchEndY - touchStartY;
-        if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy)) return; // threshold & horizontal only
-        const tabs = Array.from(document.querySelectorAll('.tab'));
-        const n = tabs.length;
-        let idx = getActiveIndex();
-        let newIdx;
-        if (dx < 0) {
-          // Swipe left: next tab (loop)
-          newIdx = (idx + 1) % n;
-          switchToIndex(newIdx, 'left');
-        } else if (dx > 0) {
-          // Swipe right: prev tab (loop)
-          newIdx = (idx - 1 + n) % n;
-          switchToIndex(newIdx, 'right');
+        if (!isDragging) return;
+        const touch = e.touches[0];
+        const dx = touch.clientX - touchStartX;
+        const dy = touch.clientY - touchStartY;
+        // Only handle horizontal drags
+        if (Math.abs(dx) > Math.abs(dy)) {
+          e.preventDefault();
+          let offset = startTranslate + dx;
+          // Looping: allow dragging beyond edges, but with resistance
+          if (activeIdx === 0 && dx > 0) offset = startTranslate + dx * 0.3;
+          if (activeIdx === nPanes - 1 && dx < 0) offset = startTranslate + dx * 0.3;
+          setTrackTranslate(offset);
         }
+        lastTouchX = touch.clientX;
+        lastTouchY = touch.clientY;
+      }, { passive: false });
+      panesContainer.addEventListener('touchend', function(e) {
+        if (!isDragging) return;
+        isDragging = false;
+        // Remove .pane-dragging from all panes
+        Array.from(panesTrack.children).forEach(pane => pane.classList.remove('pane-dragging'));
+        const dx = lastTouchX - touchStartX;
+        // Threshold: 30% of pane width
+        let newIdx = activeIdx;
+        if (Math.abs(dx) > paneWidth * 0.3) {
+          if (dx < 0 && activeIdx < nPanes - 1) newIdx = activeIdx + 1;
+          else if (dx > 0 && activeIdx > 0) newIdx = activeIdx - 1;
+        }
+        switchToIndex(newIdx);
       });
-      panesContainer.addEventListener('touchcancel', clearDragEffect);
+      panesContainer.addEventListener('touchcancel', function() {
+        if (!isDragging) return;
+        isDragging = false;
+        // Remove .pane-dragging from all panes
+        Array.from(panesTrack.children).forEach(pane => pane.classList.remove('pane-dragging'));
+        switchToIndex(activeIdx);
+      });
+      // Initial setup
+      window.addEventListener('DOMContentLoaded', () => {
+        updatePaneWidth();
+        setTrackTransition(false);
+        setTrackTranslate(0);
+      });
     })();
   const CATS = [];  // Will be populated from API
   const prev = {};
@@ -453,10 +488,17 @@ html, body {
   });
 
   function show(cat, btn) {
-    document.querySelectorAll('.pane').forEach(p => p.classList.remove('on'));
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    document.getElementById('pane-' + cat).classList.add('on');
     btn.classList.add('active');
+    // Move panes-track to correct position
+    const idx = CATS.indexOf(cat);
+    const panesContainer = document.getElementById('panes-container');
+    const panesTrack = document.getElementById('panes-track');
+    const paneWidth = panesContainer.offsetWidth;
+    panesTrack.style.transition = 'transform 0.32s cubic-bezier(.4,1.2,.4,1)';
+    panesTrack.style.transform = `translateX(${-idx * paneWidth}px)`;
+    // Center the selected tab
+    scrollTabIntoCenter(btn);
   }
 
   function esc(s) {
@@ -507,13 +549,20 @@ html, body {
   function initializeTabs(subreddits) {
     const tabsContainer = document.getElementById('tabs-container');
     const panesContainer = document.getElementById('panes-container');
-    
+    let panesTrack = document.getElementById('panes-track');
+    if (!panesTrack) {
+      panesTrack = document.createElement('div');
+      panesTrack.className = 'panes-track';
+      panesTrack.id = 'panes-track';
+      panesContainer.innerHTML = '';
+      panesContainer.appendChild(panesTrack);
+    } else {
+      panesTrack.innerHTML = '';
+    }
     tabsContainer.innerHTML = '';
-    panesContainer.innerHTML = '';
-    
+    CATS.length = 0;
     subreddits.forEach((sr, idx) => {
       CATS.push(sr);
-      
       // Create tab button
       const tab = document.createElement('button');
       tab.className = idx === 0 ? 'tab active' : 'tab';
@@ -526,15 +575,17 @@ html, body {
         <div style="font-size: 0.65rem; color: #666; margin-top: 4px;" id="ts-${sr}"></div>
       `;
       tabsContainer.appendChild(tab);
-      
       // Create pane
-      const pane = document.createElement('div');
-      pane.className = idx === 0 ? 'pane on' : 'pane';
+        const pane = document.createElement('div');
+        pane.className = 'pane';
       pane.setAttribute('data-pane', sr);
       pane.id = 'pane-' + sr;
       pane.innerHTML = skeleton();
-      panesContainer.appendChild(pane);
+      panesTrack.appendChild(pane);
     });
+    // Set initial transform
+    panesTrack.style.transform = 'translateX(0)';
+    panesTrack.style.transition = '';
   }
 
   function applyStatus(data) {
