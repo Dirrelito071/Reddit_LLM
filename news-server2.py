@@ -130,11 +130,11 @@ class NewsHandler(BaseHTTPRequestHandler):
                         if subphase == "rss":
                             label = f"RSS {current}/{total}"
                         elif subphase == "unprocessed":
-                            label = f"Unprocessed {current}/{total}"
+                            label = f"DB {current}/{total}"
                         else:
                             label = f"{current}/{total}"
                     elif phase == "summarizing":
-                        label = f"Summarizing {current}/{total}"
+                        label = f"{current}/{total}"
                     elif phase == "ready":
                         label = f"{total_posts}/{total_posts}"
                     else:
