@@ -370,7 +370,8 @@ html, body {
         return tabs.findIndex(tab => tab.classList.contains('active'));
       }
       function updatePaneWidth() {
-        paneWidth = panesContainer.offsetWidth;
+        const firstPane = panesTrack.children[0];
+        paneWidth = firstPane ? firstPane.offsetWidth : panesContainer.offsetWidth;
       }
       function setTrackTransition(enable) {
         panesTrack.style.transition = enable ? 'transform 0.32s cubic-bezier(.4,1.2,.4,1)' : 'none';
