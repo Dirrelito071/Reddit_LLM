@@ -21,7 +21,7 @@ COLLECTION PHASE:
   RSS Feed → Post URLs → Reddit JSON API → Smart Dedup → SQLite DB
 
 SUMMARIZATION PHASE:
-  Top 5 Posts (per subreddit) → LLM (Mistral 7B) → 5-Sentence Summary → Update DB
+  Top 5 Posts (per subreddit) → LLM (Gemma 3 12B) → 5-Sentence Summary → Update DB
 
 DISPLAY PHASE:
   Summarized Posts → Rank by Score → Track Engagement (↑↓) → Display Digest
@@ -61,7 +61,7 @@ REQUEST_TIMEOUT = 10
 USER_AGENT = "RedditLLM/1.0"
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL = "mistral:7b-instruct"  # 8K token context window
+MODEL = "gemma3:12b"  # 8K token context window
 LLM_TIMEOUT = 120
 LLM_TEMPERATURE = 0.2
 ```
@@ -313,7 +313,7 @@ Output: N processed, M already_summarized, E errors
 ├── news-digest.html          # Web dashboard (real-time progress + articles)
 ├── reddit_posts.db           # SQLite database (posts + progress table)
 ├── requirements.txt          # Python dependencies
-└── CLAUDE.MD                 # This file
+└── documents/CLAUDE.MD       # This file (now in documents/)
 ```
 
 ## How to Run

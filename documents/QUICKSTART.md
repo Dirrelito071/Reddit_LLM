@@ -1,5 +1,9 @@
 # Quick Start: Deploy to Server
 
+**Note:**
+- The LLM model in use is now Gemma 3 12B (see config.py: MODEL = "gemma3:12b").
+- Documentation files are now located in the `documents/` folder.
+
 ## One-Command Deployment
 
 ```bash
