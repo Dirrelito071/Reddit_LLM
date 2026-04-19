@@ -54,17 +54,38 @@ for subreddit in subreddits_to_process:
     db.mark_all_unprocessed(subreddit)
     db.update_progress(subreddit, "collecting", 0, 0, subphase="rss", current=0, total=25)
 
-    # Step 2: Process latest 25 from RSS
+    # Step 2: Process latest 25 from RSS, with staged backoff on 429
     url = config.REDDIT_RSS_URL.format(subreddit=subreddit)
-    try:
-        response = requests.get(url, headers={"User-Agent": config.USER_AGENT}, timeout=config.REQUEST_TIMEOUT)
-        response.raise_for_status()
-        feed = feedparser.parse(response.content)
-    except Exception as e:
-        print(f"  ✗ Error fetching RSS: {e}\n")
-        continue
+    backoff_stages = [60, 300, 600]  # 1 min, 5 min, 10 min (seconds)
+    backoff_attempt = 0
+    while True:
+        try:
+            response = requests.get(url, headers={"User-Agent": config.USER_AGENT}, timeout=config.REQUEST_TIMEOUT)
+            if response.status_code == 429:
+                if backoff_attempt < len(backoff_stages):
+                    wait_time = backoff_stages[backoff_attempt]
+                    print(f"  ✗ Rate limited (429). Backing off for {wait_time//60} min...")
+                    # Report backoff to progress
+                    start = time.time()
+                    end = start + wait_time
+                    while time.time() < end:
+                        remaining = int(end - time.time())
+                        db.update_progress(subreddit, "backoff", 0, 0, subphase="rate_limit", current=wait_time-remaining, total=wait_time)
+                        time.sleep(1)
+                    backoff_attempt += 1
+                    continue
+                else:
+                    print("  ✗ Rate limited (429) after max backoff attempts. Skipping subreddit.\n")
+                    db.update_progress(subreddit, "backoff", 0, 0, subphase="rate_limit", current=0, total=0)
+                    break
+            response.raise_for_status()
+            feed = feedparser.parse(response.content)
+            break
+        except Exception as e:
+            print(f"  ✗ Error fetching RSS: {e}\n")
+            break
 
-    if not feed.entries:
+    if not 'feed' in locals() or not feed.entries:
         print(f"  ✗ No posts found\n")
         continue
 

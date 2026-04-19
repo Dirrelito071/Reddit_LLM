@@ -35,6 +35,7 @@ html, body {
       --accent-orange: #f59e0b;
       --accent-green: #10b981;
       --accent-red: #ef4444;
+      --accent-backoff: #ef4444;
       --badge-collecting: #223a5f;
       --badge-summarizing: #2d3e5e;
       --badge-ready: #1e293b;
@@ -108,6 +109,7 @@ html, body {
     .bar   { height: 100%; border-radius: 99px; width: 0%; transition: width 0.3s linear; }
 
     .phase-collecting .bar   { background: var(--accent-blue); }
+    .phase-backoff .bar      { background: var(--accent-backoff); }
     .phase-collecting .badge { background: var(--badge-collecting); color: var(--accent-blue-light); }
     .phase-summarizing .bar   { background: var(--accent-orange); }
     .phase-summarizing .badge { background: var(--badge-summarizing); color: var(--accent-orange); }
@@ -446,19 +448,42 @@ html, body {
       const tab = document.querySelector(`.tab[data-cat="${cat}"]`);
       if (!tab) return;
       tab.className = `tab${tab.classList.contains('active')?' active':''} phase-${s.phase}`;
-      document.getElementById('bar-' + cat).style.width = s.pct + '%';
-      document.getElementById('lbl-' + cat).textContent = s.label;
-      document.getElementById('bdg-' + cat).textContent = s.phase;
-      // Format and display last_updated timestamp
-      if (s.last_updated) {
-        const ts = new Date(s.last_updated);
-        const timeStr = ts.toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit', second: '2-digit'});
-        document.getElementById('ts-' + cat).textContent = `Updated ${timeStr}`;
-      } else {
+      // Handle backoff phase with live countdown and red bar
+      if (s.phase === 'backoff' && s.current !== undefined && s.total && s.total > 0) {
+        // Calculate percent and time remaining
+        const pct = Math.max(0, Math.min(100, Math.round((s.current / s.total) * 100)));
+        document.getElementById('bar-' + cat).style.width = pct + '%';
+        const secondsLeft = Math.max(0, s.total - s.current);
+        let label = 'Rate Limited';
+        if (secondsLeft > 0) {
+          const min = Math.floor(secondsLeft / 60);
+          const sec = secondsLeft % 60;
+          if (min > 0) {
+            label += `, waiting ${min} min${sec > 0 ? ' ' + sec + 's' : ''}`;
+          } else {
+            label += `, waiting ${sec}s`;
+          }
+        } else {
+          label += ', waiting...';
+        }
+        document.getElementById('lbl-' + cat).textContent = label;
+        document.getElementById('bdg-' + cat).textContent = 'backoff';
         document.getElementById('ts-' + cat).textContent = '';
-      }
-      if (s.phase === 'ready' && prev[cat] !== 'ready') {
-        fetch('/api/news').then(r => r.json()).then(d => renderNews(cat, d[cat]));
+      } else {
+        document.getElementById('bar-' + cat).style.width = s.pct + '%';
+        document.getElementById('lbl-' + cat).textContent = s.label;
+        document.getElementById('bdg-' + cat).textContent = s.phase;
+        // Format and display last_updated timestamp
+        if (s.last_updated) {
+          const ts = new Date(s.last_updated);
+          const timeStr = ts.toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit', second: '2-digit'});
+          document.getElementById('ts-' + cat).textContent = `Updated ${timeStr}`;
+        } else {
+          document.getElementById('ts-' + cat).textContent = '';
+        }
+        if (s.phase === 'ready' && prev[cat] !== 'ready') {
+          fetch('/api/news').then(r => r.json()).then(d => renderNews(cat, d[cat]));
+        }
       }
       prev[cat] = s.phase;
     });
