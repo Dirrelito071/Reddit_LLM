@@ -1,3 +1,21 @@
+def get_llm_model():
+    """Get the selected LLM model from database (seeds from config if empty on first read)"""
+    stored = get_setting("llm_model")
+    if stored:
+        return stored
+    # Seed from config on first read if not in DB
+    import config
+    default_model = getattr(config, "MODEL", "mistral:7b-instruct")
+    set_setting("llm_model", default_model)
+    logger.info(f"Seeded LLM model from config: {default_model}")
+    return default_model
+
+def set_llm_model(model):
+    """Store selected LLM model in database"""
+    if not model or model.strip() == "":
+        logger.error("Cannot set empty LLM model")
+        return False
+    return set_setting("llm_model", model)
 def purge_old_posts(subreddit, days=7):
     """Delete posts older than N days for a subreddit."""
     import time

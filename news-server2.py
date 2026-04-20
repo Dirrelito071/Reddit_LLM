@@ -73,28 +73,64 @@ class NewsHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed_path = urlparse(self.path)
         path = parsed_path.path
-        
         if path == "/":
             self.serve_file("news-digest.html", "text/html; charset=utf-8")
         elif path == "/api/status":
             self.serve_status()
         elif path == "/api/news":
             self.serve_news()
+        elif path == "/api/models":
+            self.serve_models()
         else:
             self.send_error(404)
     
     def do_POST(self):
         parsed_path = urlparse(self.path)
         path = parsed_path.path
-        
         if path == "/api/run":
             self.run_pipeline_handler()
         elif path == "/api/settings/subreddits":
             self.handle_subreddit_settings()
         elif path == "/api/settings/question":
             self.handle_question_settings()
+        elif path == "/api/settings/model":
+            self.handle_model_settings()
         else:
             self.send_error(404)
+        def serve_models(self):
+            """Return a list of available LLM models from Ollama"""
+            import subprocess
+            try:
+                result = subprocess.run(["ollama", "list"], capture_output=True, text=True, check=True)
+                models = []
+                for line in result.stdout.splitlines()[1:]:  # skip header
+                    parts = line.split()
+                    if parts:
+                        models.append(parts[0])
+                self.send_json({"models": models})
+            except Exception as e:
+                logger.error(f"Error listing models: {e}")
+                self.send_json({"models": [], "error": str(e)})
+
+        def handle_model_settings(self):
+            """Handle POST /api/settings/model - update selected LLM model"""
+            try:
+                content_length = int(self.headers.get('Content-Length', 0))
+                body = self.rfile.read(content_length).decode('utf-8')
+                data = json.loads(body)
+                model = data.get("model", "").strip()
+                if not model:
+                    self.send_json({"error": "Model cannot be empty"})
+                    return
+                import db
+                if db.set_llm_model(model):
+                    logger.info(f"LLM model updated: {model}")
+                    self.send_json({"success": True, "model": model})
+                else:
+                    self.send_json({"error": "Failed to save model"})
+            except Exception as e:
+                logger.error(f"Error handling model settings: {e}")
+                self.send_json({"error": str(e)})
     
     def serve_file(self, filename, content_type):
         """Serve a static file"""
@@ -109,7 +145,7 @@ class NewsHandler(BaseHTTPRequestHandler):
             self.send_error(404, f"File not found: {filename}")
     
     def serve_status(self):
-        """Return status for each subreddit + running flag, last/next run times"""
+        """Return status for each subreddit + running flag, last/next run times, and current LLM model"""
         status = {}
         try:
             progress = db.get_progress()
@@ -163,13 +199,15 @@ class NewsHandler(BaseHTTPRequestHandler):
             subreddits = db.get_subreddits()
             status = {sr: {"phase": "error", "pct": 0, "label": "Error", "last_updated": None} for sr in subreddits}
 
-        # Add running flag, subreddits list, LLM question, and schedule times
+        # Add running flag, subreddits list, LLM question, LLM model, and schedule times
         subreddits = db.get_subreddits()
         llm_question = db.get_llm_question()
+        llm_model = db.get_llm_model()
         response = {
             "running": pipeline_running,
             "subreddits": subreddits,
             "llm_question": llm_question,
+            "llm_model": llm_model,
             "status": status,
             "last_run_time": last_run_time,
             "next_run_time": next_run_time.isoformat() if next_run_time else None
