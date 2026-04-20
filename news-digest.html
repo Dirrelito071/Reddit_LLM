@@ -604,6 +604,118 @@ html, body {
   }
 
   function initializeTabs(subreddits) {
+          // --- Improved Drag-up gesture for refresh ---
+          let dragStartY = null;
+          let dragStartX = null;
+          let dragMoved = false;
+          let dragTimeout = null;
+          let dragActive = false;
+          const dragThreshold = 48; // px
+          const dragMax = 80; // px, for max visual effect
+          function resetTabDrag() {
+            tab.style.transform = '';
+            tab.style.outlineWidth = '';
+            tab.classList.remove('tab-dragging', 'tab-refresh-ready');
+            dragActive = false;
+          }
+          tab.addEventListener('pointerdown', function(e) {
+            if (e.pointerType !== 'touch' && e.pointerType !== 'mouse') return;
+            dragStartY = e.clientY;
+            dragStartX = e.clientX;
+            dragMoved = false;
+            dragActive = true;
+            tab.setPointerCapture(e.pointerId);
+            dragTimeout = setTimeout(() => { dragStartY = null; resetTabDrag(); }, 1200); // Cancel if held too long
+          });
+          tab.addEventListener('pointermove', function(e) {
+            if (!dragActive || dragStartY === null) return;
+            const dy = e.clientY - dragStartY;
+            const dx = e.clientX - dragStartX;
+            // Only vertical upward drag, ignore horizontal or downward
+            if (Math.abs(dy) < Math.abs(dx) || dy > 0) {
+              resetTabDrag();
+              return;
+            }
+            dragMoved = true;
+            tab.classList.add('tab-dragging');
+            // Clamp drag distance for effect
+            const dragDist = Math.max(Math.min(-dy, dragMax), 0);
+            tab.style.transform = `translateY(${-dragDist}px)`;
+            // Outline grows with drag
+            tab.style.outlineWidth = `${1.5 + dragDist / 16}px`;
+            // If threshold passed, outline green
+            if (dragDist >= dragThreshold) {
+              tab.classList.add('tab-refresh-ready');
+            } else {
+              tab.classList.remove('tab-refresh-ready');
+            }
+          });
+          tab.addEventListener('pointerup', async function(e) {
+            if (dragTimeout) clearTimeout(dragTimeout);
+            if (!dragActive || dragStartY === null) { resetTabDrag(); return; }
+            const dy = e.clientY - dragStartY;
+            const dx = e.clientX - dragStartX;
+            dragStartY = null;
+            dragActive = false;
+            // Only upward drag, threshold
+            if (dy < -dragThreshold && Math.abs(dy) > Math.abs(dx)) {
+              tab.classList.add('tab-refresh-ready');
+              tab.disabled = true;
+              // Animate back
+              tab.style.transition = 'transform 0.22s cubic-bezier(.4,1.2,.4,1), outline-width 0.18s';
+              tab.style.transform = '';
+              setTimeout(() => { tab.style.transition = ''; }, 240);
+              // Call backend to refresh this subreddit
+              try {
+                const resp = await fetch('/api/refresh', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ subreddit: sr })
+                });
+                const data = await resp.json();
+                if (data.started) {
+                  setTimeout(() => { tab.classList.remove('tab-refresh-ready'); }, 1200);
+                } else if (data.error) {
+                  alert('Error: ' + data.error);
+                  tab.classList.remove('tab-refresh-ready');
+                }
+              } catch (err) {
+                alert('Failed to refresh: ' + err);
+                tab.classList.remove('tab-refresh-ready');
+              } finally {
+                setTimeout(() => { tab.disabled = false; resetTabDrag(); }, 1000);
+              }
+            } else {
+              // Animate back
+              tab.style.transition = 'transform 0.22s cubic-bezier(.4,1.2,.4,1), outline-width 0.18s';
+              tab.style.transform = '';
+              setTimeout(() => { tab.style.transition = ''; resetTabDrag(); }, 240);
+            }
+          });
+          tab.addEventListener('pointerleave', function() {
+            if (dragTimeout) clearTimeout(dragTimeout);
+            resetTabDrag();
+          });
+          // --- End improved drag-up gesture ---
+      // Add style for improved drag-up gesture
+      const style = document.createElement('style');
+      style.innerHTML = `
+        .tab.tab-dragging {
+          transition: transform 0.18s cubic-bezier(.4,1.2,.4,1), box-shadow 0.18s, outline-width 0.18s, outline-color 0.18s;
+          z-index: 10;
+          position: relative;
+          will-change: transform;
+        }
+        .tab.tab-refresh-ready {
+          outline-color: var(--accent-green) !important;
+          box-shadow: 0 0 0 4px var(--accent-green), 0 2px 8px rgba(16,185,129,0.18);
+        }
+        .tab.tab-dragging:not(.tab-refresh-ready) {
+          outline-color: var(--accent-blue) !important;
+          box-shadow: 0 0 0 4px var(--accent-blue), 0 2px 8px rgba(59,130,246,0.18);
+        }
+      `;
+      document.head.appendChild(style);
     const tabsContainer = document.getElementById('tabs-container');
     const panesContainer = document.getElementById('panes-container');
     let panesTrack = document.getElementById('panes-track');
@@ -631,63 +743,7 @@ html, body {
         <div class="track"><div class="bar" id="bar-${sr}"></div></div>
         <div style="font-size: 0.65rem; color: #666; margin-top: 4px;" id="ts-${sr}"></div>
       `;
-      // --- Drag-up gesture for refresh ---
-      let dragStartY = null;
-      let dragMoved = false;
-      let dragTimeout = null;
-      tab.addEventListener('pointerdown', function(e) {
-        if (e.pointerType !== 'touch' && e.pointerType !== 'mouse') return;
-        dragStartY = e.clientY;
-        dragMoved = false;
-        dragTimeout = setTimeout(() => { dragStartY = null; }, 1200); // Cancel if held too long
-      });
-      tab.addEventListener('pointermove', function(e) {
-        if (dragStartY === null) return;
-        const dy = e.clientY - dragStartY;
-        if (dy < -40) { // Dragged up at least 40px
-          dragMoved = true;
-          tab.classList.add('tab-refreshing');
-        }
-      });
-      tab.addEventListener('pointerup', async function(e) {
-        if (dragTimeout) clearTimeout(dragTimeout);
-        if (dragStartY === null) return;
-        const dy = e.clientY - dragStartY;
-        dragStartY = null;
-        if (dy < -40) {
-          tab.classList.add('tab-refreshing');
-          // Call backend to refresh this subreddit
-          try {
-            tab.disabled = true;
-            const resp = await fetch('/api/refresh', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ subreddit: sr })
-            });
-            const data = await resp.json();
-            if (data.started) {
-              // Optionally show a toast or highlight
-              setTimeout(() => { tab.classList.remove('tab-refreshing'); }, 1200);
-            } else if (data.error) {
-              alert('Error: ' + data.error);
-              tab.classList.remove('tab-refreshing');
-            }
-          } catch (err) {
-            alert('Failed to refresh: ' + err);
-            tab.classList.remove('tab-refreshing');
-          } finally {
-            setTimeout(() => { tab.disabled = false; }, 1000);
-          }
-        } else {
-          tab.classList.remove('tab-refreshing');
-        }
-      });
-      tab.addEventListener('pointerleave', function() {
-        if (dragTimeout) clearTimeout(dragTimeout);
-        dragStartY = null;
-        tab.classList.remove('tab-refreshing');
-      });
-      // --- End drag-up gesture ---
+      // Drag-up gesture for refresh will be added in the next step
       tabsContainer.appendChild(tab);
       // Create pane
       const pane = document.createElement('div');
