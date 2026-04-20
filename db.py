@@ -355,12 +355,19 @@ def init_progress():
 
 
 def reset_progress():
+
     """Clear all progress records"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    
     cursor.execute("DELETE FROM progress")
-    
+    conn.commit()
+    conn.close()
+
+def reset_progress_for_subreddit(subreddit):
+    """Clear progress records for a single subreddit only"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM progress WHERE subreddit = ?", (subreddit,))
     conn.commit()
     conn.close()
 

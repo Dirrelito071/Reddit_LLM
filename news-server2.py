@@ -11,7 +11,7 @@ def run_pipeline_for_subreddit(subreddit):
     logger.info("=" * 80 + "\n")
     try:
         # Reset progress for just this subreddit
-        db.reset_progress(subreddit=subreddit)
+        db.reset_progress_for_subreddit(subreddit)
         sr_start = time.time()
         # COLLECT
         logger.info(f"[1/2] Collecting posts from r/{subreddit}...")
