@@ -99,18 +99,20 @@ class NewsHandler(BaseHTTPRequestHandler):
             self.send_error(404)
 
     def serve_models(self):
-        """Return a list of available LLM models from Ollama"""
-        import subprocess
+        """Return a list of available LLM models from Ollama HTTP API on MacBook"""
+        import requests
+        ollama_url = getattr(config, "OLLAMA_URL", "http://Martins-MacBook-Pro.local:11434/api/generate")
+        # Remove /api/generate if present, replace with /api/tags
+        base_url = ollama_url.replace("/api/generate", "")
+        tags_url = base_url.rstrip("/") + "/api/tags"
         try:
-            result = subprocess.run(["ollama", "list"], capture_output=True, text=True, check=True)
-            models = []
-            for line in result.stdout.splitlines()[1:]:  # skip header
-                parts = line.split()
-                if parts:
-                    models.append(parts[0])
+            resp = requests.get(tags_url, timeout=5)
+            resp.raise_for_status()
+            data = resp.json()
+            models = [m["name"] for m in data.get("models", []) if "name" in m]
             self.send_json({"models": models})
         except Exception as e:
-            logger.error(f"Error listing models: {e}")
+            logger.error(f"Error listing models from Ollama API: {e}")
             self.send_json({"models": [], "error": str(e)})
 
     def handle_model_settings(self):
