@@ -97,40 +97,41 @@ class NewsHandler(BaseHTTPRequestHandler):
             self.handle_model_settings()
         else:
             self.send_error(404)
-        def serve_models(self):
-            """Return a list of available LLM models from Ollama"""
-            import subprocess
-            try:
-                result = subprocess.run(["ollama", "list"], capture_output=True, text=True, check=True)
-                models = []
-                for line in result.stdout.splitlines()[1:]:  # skip header
-                    parts = line.split()
-                    if parts:
-                        models.append(parts[0])
-                self.send_json({"models": models})
-            except Exception as e:
-                logger.error(f"Error listing models: {e}")
-                self.send_json({"models": [], "error": str(e)})
 
-        def handle_model_settings(self):
-            """Handle POST /api/settings/model - update selected LLM model"""
-            try:
-                content_length = int(self.headers.get('Content-Length', 0))
-                body = self.rfile.read(content_length).decode('utf-8')
-                data = json.loads(body)
-                model = data.get("model", "").strip()
-                if not model:
-                    self.send_json({"error": "Model cannot be empty"})
-                    return
-                import db
-                if db.set_llm_model(model):
-                    logger.info(f"LLM model updated: {model}")
-                    self.send_json({"success": True, "model": model})
-                else:
-                    self.send_json({"error": "Failed to save model"})
-            except Exception as e:
-                logger.error(f"Error handling model settings: {e}")
-                self.send_json({"error": str(e)})
+    def serve_models(self):
+        """Return a list of available LLM models from Ollama"""
+        import subprocess
+        try:
+            result = subprocess.run(["ollama", "list"], capture_output=True, text=True, check=True)
+            models = []
+            for line in result.stdout.splitlines()[1:]:  # skip header
+                parts = line.split()
+                if parts:
+                    models.append(parts[0])
+            self.send_json({"models": models})
+        except Exception as e:
+            logger.error(f"Error listing models: {e}")
+            self.send_json({"models": [], "error": str(e)})
+
+    def handle_model_settings(self):
+        """Handle POST /api/settings/model - update selected LLM model"""
+        try:
+            content_length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(content_length).decode('utf-8')
+            data = json.loads(body)
+            model = data.get("model", "").strip()
+            if not model:
+                self.send_json({"error": "Model cannot be empty"})
+                return
+            import db
+            if db.set_llm_model(model):
+                logger.info(f"LLM model updated: {model}")
+                self.send_json({"success": True, "model": model})
+            else:
+                self.send_json({"error": "Failed to save model"})
+        except Exception as e:
+            logger.error(f"Error handling model settings: {e}")
+            self.send_json({"error": str(e)})
     
     def serve_file(self, filename, content_type):
         """Serve a static file"""
