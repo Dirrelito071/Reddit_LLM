@@ -19,6 +19,6 @@ USER_AGENT = "RedditLLM/1.0"
 # Use environment variable OLLAMA_URL if set, otherwise use MacBook Pro's hostname
 # The Ollama server runs on Martins-MacBook-Pro.local:11434
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://Martins-MacBook-Pro.local:11434/api/generate")
-MODEL = "gemma3:12b"
+MODEL = "mistral:7b-instruct"
 LLM_TIMEOUT = 120
 LLM_TEMPERATURE = 0.2
