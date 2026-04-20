@@ -156,7 +156,7 @@ html, body {
     .card h3 { font-size: 1.425rem; margin-bottom: 6px; line-height: 1.35; }
     .card h3 a { color: var(--text-link); text-decoration: none; transition: all 0.2s; }
     .card h3 a:hover { color: var(--text-link-hover); text-decoration: underline; }
-    .card p  { font-size: 1.64rem; color: var(--text-main); line-height: 1.55; }
+    .card p  { font-size: 1.148rem; color: var(--text-main); line-height: 1.55; }
     .card .meta { font-size: 0.7rem; color: var(--text-meta); margin-bottom: 6px; }
     a.card { display: block; text-decoration: none; color: inherit; }
 
@@ -399,6 +399,19 @@ html, body {
       function scrollTabIntoCenter(tab) {
         const tabsContainer = document.getElementById('tabs-container');
         if (!tab || !tabsContainer) return;
+        const tabs = Array.from(tabsContainer.querySelectorAll('.tab'));
+        const idx = tabs.indexOf(tab);
+        // If first tab, scroll all the way left
+        if (idx === 0) {
+          tabsContainer.scrollTo({ left: 0, behavior: 'smooth' });
+          return;
+        }
+        // If last tab, scroll all the way right
+        if (idx === tabs.length - 1) {
+          tabsContainer.scrollTo({ left: tabsContainer.scrollWidth, behavior: 'smooth' });
+          return;
+        }
+        // Otherwise, center as usual
         const tabRect = tab.getBoundingClientRect();
         const containerRect = tabsContainer.getBoundingClientRect();
         const tabCenter = tabRect.left + tabRect.width / 2;
