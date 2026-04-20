@@ -1,8 +1,9 @@
 def run_pipeline_for_subreddit(subreddit):
     """Run the pipeline (collect + summarize) for a single subreddit only."""
     global pipeline_running
+    logger.info(f"[DEBUG] Entered run_pipeline_for_subreddit for r/{subreddit}, pipeline_running={pipeline_running}")
     if pipeline_running:
-        logger.info(f"Pipeline already running, skipping refresh for {subreddit}")
+        logger.warning(f"[DEBUG] Pipeline already running, skipping refresh for {subreddit}")
         return
     pipeline_running = True
     logger.info("\n" + "=" * 80)
