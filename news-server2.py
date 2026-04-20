@@ -1,3 +1,50 @@
+def run_pipeline_for_subreddit(subreddit):
+    """Run the pipeline (collect + summarize) for a single subreddit only."""
+    global pipeline_running
+    if pipeline_running:
+        logger.info(f"Pipeline already running, skipping refresh for {subreddit}")
+        return
+    pipeline_running = True
+    logger.info("\n" + "=" * 80)
+    logger.info(f"PIPELINE STARTED - Single subreddit: r/{subreddit}")
+    logger.info("=" * 80 + "\n")
+    try:
+        # Reset progress for just this subreddit
+        db.reset_progress(subreddit=subreddit)
+        sr_start = time.time()
+        # COLLECT
+        logger.info(f"[1/2] Collecting posts from r/{subreddit}...")
+        logger.info("-" * 80)
+        try:
+            result = subprocess.run([sys.executable, "main.py", "--subreddit", subreddit], check=True)
+            if result.returncode != 0:
+                logger.error(f"\nError collecting from r/{subreddit}")
+        except subprocess.CalledProcessError as e:
+            logger.error(f"\nError collecting from r/{subreddit}: {e}")
+        except FileNotFoundError:
+            logger.error(f"\nmain.py not found")
+        collect_time = time.time() - sr_start
+        # SUMMARIZE
+        logger.info(f"\n[2/2] Summarizing top 5 posts from r/{subreddit}...")
+        logger.info("-" * 80)
+        try:
+            result = subprocess.run([sys.executable, "summarize.py", "--subreddit", subreddit], check=True)
+            if result.returncode != 0:
+                logger.error(f"\nError summarizing r/{subreddit}")
+        except subprocess.CalledProcessError as e:
+            logger.error(f"\nError summarizing r/{subreddit}: {e}")
+        except FileNotFoundError:
+            logger.error(f"\nsummarize.py not found")
+        sr_total = time.time() - sr_start
+        summarize_time = sr_total - collect_time
+        logger.info(f"\nr/{subreddit} complete (collected: {collect_time:.1f}s, summarized: {summarize_time:.1f}s)")
+        logger.info("\n" + "=" * 80)
+        logger.info("PIPELINE COMPLETE (single subreddit)")
+        logger.info("=" * 80 + "\n")
+    except Exception as e:
+        logger.error(f"\nPipeline error (single subreddit): {e}\n")
+    finally:
+        pipeline_running = False
 #!/usr/bin/env python3
 """
 News Server with Pipeline Orchestration
@@ -95,8 +142,28 @@ class NewsHandler(BaseHTTPRequestHandler):
             self.handle_question_settings()
         elif path == "/api/settings/model":
             self.handle_model_settings()
+        elif path == "/api/refresh":
+            self.handle_refresh_subreddit()
         else:
             self.send_error(404)
+
+    def handle_refresh_subreddit(self):
+        """Handle POST /api/refresh - refresh a single subreddit"""
+        import threading
+        try:
+            content_length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(content_length).decode('utf-8')
+            data = json.loads(body)
+            subreddit = data.get("subreddit", "").strip()
+            if not subreddit:
+                self.send_json({"error": "Subreddit is required"})
+                return
+            # Start pipeline for this subreddit in background
+            threading.Thread(target=run_pipeline_for_subreddit, args=(subreddit,), daemon=True).start()
+            self.send_json({"started": True, "subreddit": subreddit})
+        except Exception as e:
+            logger.error(f"Error handling refresh subreddit: {e}")
+            self.send_json({"error": str(e)})
 
     def serve_models(self):
         """Return a list of available LLM models from Ollama HTTP API on MacBook"""

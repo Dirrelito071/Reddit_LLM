@@ -631,10 +631,67 @@ html, body {
         <div class="track"><div class="bar" id="bar-${sr}"></div></div>
         <div style="font-size: 0.65rem; color: #666; margin-top: 4px;" id="ts-${sr}"></div>
       `;
+      // --- Drag-up gesture for refresh ---
+      let dragStartY = null;
+      let dragMoved = false;
+      let dragTimeout = null;
+      tab.addEventListener('pointerdown', function(e) {
+        if (e.pointerType !== 'touch' && e.pointerType !== 'mouse') return;
+        dragStartY = e.clientY;
+        dragMoved = false;
+        dragTimeout = setTimeout(() => { dragStartY = null; }, 1200); // Cancel if held too long
+      });
+      tab.addEventListener('pointermove', function(e) {
+        if (dragStartY === null) return;
+        const dy = e.clientY - dragStartY;
+        if (dy < -40) { // Dragged up at least 40px
+          dragMoved = true;
+          tab.classList.add('tab-refreshing');
+        }
+      });
+      tab.addEventListener('pointerup', async function(e) {
+        if (dragTimeout) clearTimeout(dragTimeout);
+        if (dragStartY === null) return;
+        const dy = e.clientY - dragStartY;
+        dragStartY = null;
+        if (dy < -40) {
+          tab.classList.add('tab-refreshing');
+          // Call backend to refresh this subreddit
+          try {
+            tab.disabled = true;
+            const resp = await fetch('/api/refresh', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ subreddit: sr })
+            });
+            const data = await resp.json();
+            if (data.started) {
+              // Optionally show a toast or highlight
+              setTimeout(() => { tab.classList.remove('tab-refreshing'); }, 1200);
+            } else if (data.error) {
+              alert('Error: ' + data.error);
+              tab.classList.remove('tab-refreshing');
+            }
+          } catch (err) {
+            alert('Failed to refresh: ' + err);
+            tab.classList.remove('tab-refreshing');
+          } finally {
+            setTimeout(() => { tab.disabled = false; }, 1000);
+          }
+        } else {
+          tab.classList.remove('tab-refreshing');
+        }
+      });
+      tab.addEventListener('pointerleave', function() {
+        if (dragTimeout) clearTimeout(dragTimeout);
+        dragStartY = null;
+        tab.classList.remove('tab-refreshing');
+      });
+      // --- End drag-up gesture ---
       tabsContainer.appendChild(tab);
       // Create pane
-        const pane = document.createElement('div');
-        pane.className = 'pane';
+      const pane = document.createElement('div');
+      pane.className = 'pane';
       pane.setAttribute('data-pane', sr);
       pane.id = 'pane-' + sr;
       pane.innerHTML = skeleton();
@@ -644,6 +701,11 @@ html, body {
     panesTrack.style.transform = 'translateX(0)';
     panesTrack.style.transition = '';
   }
+  // Add style for tab-refreshing
+  const style = document.createElement('style');
+  style.innerHTML = `.tab.tab-refreshing { box-shadow: 0 0 0 3px var(--accent-blue); background: var(--bg-tab-active); animation: tabRefreshPulse 0.7s linear 2; }
+  @keyframes tabRefreshPulse { 0% { box-shadow: 0 0 0 0 var(--accent-blue); } 50% { box-shadow: 0 0 0 6px var(--accent-blue); } 100% { box-shadow: 0 0 0 0 var(--accent-blue); } }`;
+  document.head.appendChild(style);
 
   function applyStatus(data) {
     const isRunning = data.running;
