@@ -4,8 +4,36 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, orientation=portrait">
 <title>Reddit Daily Digest</title>
 <style>
+        @media screen and (orientation: landscape) {
+          body {
+            transform: rotate(-90deg);
+            width: 100vh;
+            height: 100vw;
+            overflow-x: hidden;
+            position: absolute;
+            top: 100%;
+            left: 0;
+          }
+          #rotate-message {
+            display: block;
+          }
+        }
+        #rotate-message {
+          display: none;
+          position: fixed;
+          top: 40%;
+          left: 0;
+          width: 100vw;
+          text-align: center;
+          color: #fff;
+          background: #232946;
+          font-size: 1.5rem;
+          z-index: 9999;
+          padding: 2rem 0;
+        }
         /* Visual feedback for swipe drag */
         .pane-dragging {
           box-shadow: 0 8px 32px 0 rgba(60,60,100,0.18), 0 1.5px 0 #232946;
@@ -290,6 +318,7 @@ html, body {
 </head>
 <body>
 <div class="app-shell">
+<div id="rotate-message">Please rotate your device back to portrait mode.</div>
   <header>
     <div style="display: flex; flex-direction: column; gap: 0; width: 100%;">
       <div style="display: flex; align-items: center; width: 100%;">
