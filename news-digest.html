@@ -619,99 +619,8 @@ function debugLog(msg) {
   }
 
   function initializeTabs(subreddits) {
-          // --- Improved Drag-up gesture for refresh ---
-          let dragStartY = null;
-          let dragStartX = null;
-          let dragMoved = false;
-          let dragTimeout = null;
-          let dragActive = false;
-          const dragThreshold = 48; // px
-          const dragMax = 80; // px, for max visual effect
-          function resetTabDrag() {
-            tab.style.transform = '';
-            tab.style.outlineWidth = '';
-            tab.classList.remove('tab-dragging', 'tab-refresh-ready');
-            dragActive = false;
-          }
-          tab.addEventListener('pointerdown', function(e) {
-            if (e.pointerType !== 'touch' && e.pointerType !== 'mouse') return;
-            dragStartY = e.clientY;
-            dragStartX = e.clientX;
-            dragMoved = false;
-            dragActive = true;
-            tab.setPointerCapture(e.pointerId);
-            dragTimeout = setTimeout(() => { dragStartY = null; resetTabDrag(); }, 1200); // Cancel if held too long
-          });
-          tab.addEventListener('pointermove', function(e) {
-            if (!dragActive || dragStartY === null) return;
-            const dy = e.clientY - dragStartY;
-            const dx = e.clientX - dragStartX;
-            // Only vertical upward drag, ignore horizontal or downward
-            if (Math.abs(dy) < Math.abs(dx) || dy > 0) {
-              resetTabDrag();
-              return;
-            }
-            dragMoved = true;
-            tab.classList.add('tab-dragging');
-            // Clamp drag distance for effect
-            const dragDist = Math.max(Math.min(-dy, dragMax), 0);
-            tab.style.transform = `translateY(${-dragDist}px)`;
-            // Outline grows with drag
-            tab.style.outlineWidth = `${1.5 + dragDist / 16}px`;
-            // If threshold passed, outline green
-            if (dragDist >= dragThreshold) {
-              tab.classList.add('tab-refresh-ready');
-            } else {
-              tab.classList.remove('tab-refresh-ready');
-            }
-          });
-          tab.addEventListener('pointerup', async function(e) {
-            if (dragTimeout) clearTimeout(dragTimeout);
-            if (!dragActive || dragStartY === null) { resetTabDrag(); return; }
-            const dy = e.clientY - dragStartY;
-            const dx = e.clientX - dragStartX;
-            dragStartY = null;
-            dragActive = false;
-            // Only upward drag, threshold
-            if (dy < -dragThreshold && Math.abs(dy) > Math.abs(dx)) {
-              tab.classList.add('tab-refresh-ready');
-              tab.disabled = true;
-              // Animate back
-              tab.style.transition = 'transform 0.22s cubic-bezier(.4,1.2,.4,1), outline-width 0.18s';
-              tab.style.transform = '';
-              setTimeout(() => { tab.style.transition = ''; }, 240);
-              // Call backend to refresh this subreddit
-              try {
-                const resp = await fetch('/api/refresh', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ subreddit: sr })
-                });
-                const data = await resp.json();
-                if (data.started) {
-                  setTimeout(() => { tab.classList.remove('tab-refresh-ready'); }, 1200);
-                } else if (data.error) {
-                  alert('Error: ' + data.error);
-                  tab.classList.remove('tab-refresh-ready');
-                }
-              } catch (err) {
-                alert('Failed to refresh: ' + err);
-                tab.classList.remove('tab-refresh-ready');
-              } finally {
-                setTimeout(() => { tab.disabled = false; resetTabDrag(); }, 1000);
-              }
-            } else {
-              // Animate back
-              tab.style.transition = 'transform 0.22s cubic-bezier(.4,1.2,.4,1), outline-width 0.18s';
-              tab.style.transform = '';
-              setTimeout(() => { tab.style.transition = ''; resetTabDrag(); }, 240);
-            }
-          });
-          tab.addEventListener('pointerleave', function() {
-            if (dragTimeout) clearTimeout(dragTimeout);
-            resetTabDrag();
-          });
-          // --- End improved drag-up gesture ---
+    // --- Improved Drag-up gesture for refresh ---
+    // Move this logic inside the forEach loop so 'tab' is defined
       // Add style for improved drag-up gesture
       const style = document.createElement('style');
       style.innerHTML = `
@@ -758,7 +667,99 @@ function debugLog(msg) {
         <div class="track"><div class="bar" id="bar-${sr}"></div></div>
         <div style="font-size: 0.65rem; color: #666; margin-top: 4px;" id="ts-${sr}"></div>
       `;
-      // Drag-up gesture for refresh will be added in the next step
+      // --- Begin improved drag-up gesture for this tab ---
+      let dragStartY = null;
+      let dragStartX = null;
+      let dragMoved = false;
+      let dragTimeout = null;
+      let dragActive = false;
+      const dragThreshold = 48; // px
+      const dragMax = 80; // px, for max visual effect
+      function resetTabDrag() {
+        tab.style.transform = '';
+        tab.style.outlineWidth = '';
+        tab.classList.remove('tab-dragging', 'tab-refresh-ready');
+        dragActive = false;
+      }
+      tab.addEventListener('pointerdown', function(e) {
+        if (e.pointerType !== 'touch' && e.pointerType !== 'mouse') return;
+        dragStartY = e.clientY;
+        dragStartX = e.clientX;
+        dragMoved = false;
+        dragActive = true;
+        tab.setPointerCapture(e.pointerId);
+        dragTimeout = setTimeout(() => { dragStartY = null; resetTabDrag(); }, 1200); // Cancel if held too long
+      });
+      tab.addEventListener('pointermove', function(e) {
+        if (!dragActive || dragStartY === null) return;
+        const dy = e.clientY - dragStartY;
+        const dx = e.clientX - dragStartX;
+        // Only vertical upward drag, ignore horizontal or downward
+        if (Math.abs(dy) < Math.abs(dx) || dy > 0) {
+          resetTabDrag();
+          return;
+        }
+        dragMoved = true;
+        tab.classList.add('tab-dragging');
+        // Clamp drag distance for effect
+        const dragDist = Math.max(Math.min(-dy, dragMax), 0);
+        tab.style.transform = `translateY(${-dragDist}px)`;
+        // Outline grows with drag
+        tab.style.outlineWidth = `${1.5 + dragDist / 16}px`;
+        // If threshold passed, outline green
+        if (dragDist >= dragThreshold) {
+          tab.classList.add('tab-refresh-ready');
+        } else {
+          tab.classList.remove('tab-refresh-ready');
+        }
+      });
+      tab.addEventListener('pointerup', async function(e) {
+        if (dragTimeout) clearTimeout(dragTimeout);
+        if (!dragActive || dragStartY === null) { resetTabDrag(); return; }
+        const dy = e.clientY - dragStartY;
+        const dx = e.clientX - dragStartX;
+        dragStartY = null;
+        dragActive = false;
+        // Only upward drag, threshold
+        if (dy < -dragThreshold && Math.abs(dy) > Math.abs(dx)) {
+          tab.classList.add('tab-refresh-ready');
+          tab.disabled = true;
+          // Animate back
+          tab.style.transition = 'transform 0.22s cubic-bezier(.4,1.2,.4,1), outline-width 0.18s';
+          tab.style.transform = '';
+          setTimeout(() => { tab.style.transition = ''; }, 240);
+          // Call backend to refresh this subreddit
+          try {
+            const resp = await fetch('/api/refresh', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ subreddit: sr })
+            });
+            const data = await resp.json();
+            if (data.started) {
+              setTimeout(() => { tab.classList.remove('tab-refresh-ready'); }, 1200);
+            } else if (data.error) {
+              alert('Error: ' + data.error);
+              tab.classList.remove('tab-refresh-ready');
+            }
+          } catch (err) {
+            alert('Failed to refresh: ' + err);
+            tab.classList.remove('tab-refresh-ready');
+          } finally {
+            setTimeout(() => { tab.disabled = false; resetTabDrag(); }, 1000);
+          }
+        } else {
+          // Animate back
+          tab.style.transition = 'transform 0.22s cubic-bezier(.4,1.2,.4,1), outline-width 0.18s';
+          tab.style.transform = '';
+          setTimeout(() => { tab.style.transition = ''; resetTabDrag(); }, 240);
+        }
+      });
+      tab.addEventListener('pointerleave', function() {
+        if (dragTimeout) clearTimeout(dragTimeout);
+        resetTabDrag();
+      });
+      // --- End improved drag-up gesture ---
       tabsContainer.appendChild(tab);
       // Create pane
       const pane = document.createElement('div');
