@@ -155,11 +155,9 @@ for subreddit in subreddits_to_process:
             else:
                 print(f"  [{i}/25] ✗ Invalid API response")
                 error_count += 1
-            time.sleep(2)
         except Exception as e:
             print(f"  [{i}/25] ✗ Error: {str(e)[:50]}")
             error_count += 1
-            time.sleep(2)
 
     # Step 3: Process unprocessed posts
     unprocessed = db.get_unprocessed_posts(subreddit)
@@ -217,10 +215,8 @@ for subreddit in subreddits_to_process:
                     print(f"  [U{idx}] ↻ Refreshed: {store_data['title']} ({store_data['score']} pts, {store_data['num_comments']} comments)")
             else:
                 print(f"  [U{idx}] ✗ Invalid API response for unprocessed post")
-            time.sleep(2)
         except Exception as e:
             print(f"  [U{idx}] ✗ Error: {str(e)[:50]}")
-            time.sleep(2)
 
     # Mark collecting phase as done
     db.update_progress(subreddit, "collecting", 100, 0, subphase="unprocessed", current=total_unprocessed, total=total_unprocessed)
