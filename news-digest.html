@@ -319,7 +319,7 @@ html, body {
 </div>
 
 <!-- Debug Panel -->
-<div id="debug-panel" style="position:fixed;bottom:0;left:0;width:100vw;max-height:180px;overflow-y:auto;background:rgba(20,24,38,0.97);color:#fff;font-size:0.95rem;font-family:monospace;z-index:9999;padding:8px 12px;box-shadow:0 -2px 8px #000a;display:none;"></div>
+
 
 <!-- Settings Modal -->
 <div id="settings-modal" class="modal-overlay" style="display:none">
@@ -384,16 +384,7 @@ html, body {
 
 
 <script>
-// Debug log function and panel
-function debugLog(msg) {
-  const panel = document.getElementById('debug-panel');
-  if (panel) {
-    panel.style.display = 'block';
-    const time = new Date().toLocaleTimeString();
-    panel.innerHTML += `<div>[${time}] ${msg}</div>`;
-    panel.scrollTop = panel.scrollHeight;
-  }
-}
+
 
     // --- Real-Time Swipe/Peek Effect for Panes ---
     (function() {
@@ -856,16 +847,13 @@ function debugLog(msg) {
   fetch('/api/status')
     .then(r => r.json())
     .then(data => {
-      debugLog('Fetched /api/status successfully.');
       // Get subreddit names from status object keys (most reliable)
       const subreddits = Object.keys(data.status || {});
-      debugLog('Initializing tabs for subreddits: ' + JSON.stringify(subreddits));
       initializeTabs(subreddits);
       applyStatus(data);
       updateRunTimes(data);
     })
     .catch((err) => {
-      debugLog('Error fetching /api/status: ' + err);
       const e = document.getElementById('err');
       e.style.display = 'block';
       e.textContent = '⚠ python3 news-server2.py is not running';
@@ -875,11 +863,9 @@ function debugLog(msg) {
   setInterval(() =>
     fetch('/api/status')
       .then(r => r.json()).then(data => {
-        debugLog('Polled /api/status.');
         applyStatus(data); updateRunTimes(data);
       })
       .catch((err) => {
-        debugLog('Polling error: ' + err);
         const e = document.getElementById('err');
         e.style.display = 'block';
         e.textContent = '⚠ python3 news-server2.py is not running';
