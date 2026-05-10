@@ -906,9 +906,15 @@ html, body {
       let reorderLongPressTimer = null;
       let reorderActive = false;
       let reorderStartX = 0; // pointer X at moment drag mode activated
+      let reorderScrollRAF = null;
+      let reorderScrollDir = 0;
+      let reorderScrollStrength = 0;
+      let lastDragClientX = 0;
 
       function cancelReorder() {
         if (reorderLongPressTimer) { clearTimeout(reorderLongPressTimer); reorderLongPressTimer = null; }
+        if (reorderScrollRAF) { cancelAnimationFrame(reorderScrollRAF); reorderScrollRAF = null; }
+        reorderScrollDir = 0;
         reorderActive = false;
         reorderPointerStart = null;
         tab.classList.remove('tab-dragging');
@@ -920,6 +926,7 @@ html, body {
       }
 
       function onDragMove(clientX) {
+        lastDragClientX = clientX;
         const dx = clientX - reorderStartX;
         tab.style.transform = `translateX(${dx}px) scale(1.06)`;
         const allTabs = Array.from(tabsContainer.children);
@@ -938,9 +945,38 @@ html, body {
             t.style.transform = '';
           }
         });
+        // Edge auto-scroll
+        const cRect = tabsContainer.getBoundingClientRect();
+        const edge = 60;
+        if (clientX < cRect.left + edge) {
+          reorderScrollStrength = 1 - Math.max(0, clientX - cRect.left) / edge;
+          reorderScrollDir = -1;
+        } else if (clientX > cRect.right - edge) {
+          reorderScrollStrength = 1 - Math.max(0, cRect.right - clientX) / edge;
+          reorderScrollDir = 1;
+        } else {
+          reorderScrollDir = 0;
+        }
+        if (reorderScrollDir !== 0 && !reorderScrollRAF) {
+          let lastSL = tabsContainer.scrollLeft;
+          function scrollStep() {
+            if (!reorderActive || reorderScrollDir === 0) { reorderScrollRAF = null; return; }
+            tabsContainer.scrollLeft += reorderScrollDir * reorderScrollStrength * 8;
+            const scrolled = tabsContainer.scrollLeft - lastSL;
+            lastSL = tabsContainer.scrollLeft;
+            if (scrolled !== 0) { reorderStartX -= scrolled; onDragMove(lastDragClientX); }
+            reorderScrollRAF = requestAnimationFrame(scrollStep);
+          }
+          reorderScrollRAF = requestAnimationFrame(scrollStep);
+        } else if (reorderScrollDir === 0 && reorderScrollRAF) {
+          cancelAnimationFrame(reorderScrollRAF);
+          reorderScrollRAF = null;
+        }
       }
 
       function finishReorder(clientX) {
+        if (reorderScrollRAF) { cancelAnimationFrame(reorderScrollRAF); reorderScrollRAF = null; }
+        reorderScrollDir = 0;
         const allTabs = Array.from(tabsContainer.children);
         const draggedIdx = allTabs.indexOf(tab);
         let targetIdx = draggedIdx;
