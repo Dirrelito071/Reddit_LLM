@@ -430,6 +430,9 @@ class NewsHandler(BaseHTTPRequestHandler):
             self.send_error(500)
 
 
+# Purge posts for any subreddits removed from the active list
+db.purge_inactive_subreddits()
+
 def run_pipeline():
     """Run full pipeline: collect + summarize for each subreddit"""
     global pipeline_running

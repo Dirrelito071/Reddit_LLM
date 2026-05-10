@@ -538,6 +538,21 @@ def set_llm_question(question):
     return set_setting("llm_question", question)
 
 
+def purge_inactive_subreddits():
+    """Delete all posts for subreddits no longer in the active list."""
+    active = get_subreddits()
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT DISTINCT subreddit FROM posts")
+    all_subs = [r[0] for r in cursor.fetchall()]
+    inactive = [s for s in all_subs if s not in active]
+    for sub in inactive:
+        cursor.execute("DELETE FROM posts WHERE subreddit = ?", (sub,))
+        logger.info(f"Purged {cursor.rowcount} posts for removed subreddit r/{sub}")
+    conn.commit()
+    conn.close()
+
+
 def get_purge_days():
     """Get post age limit in days (default 14)"""
     stored = get_setting("purge_days")
