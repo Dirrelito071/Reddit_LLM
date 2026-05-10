@@ -735,6 +735,7 @@ html, body {
       });
     })();
   const CATS = [];  // Will be populated from API
+  let currentCat = null; // tracks the currently visible subreddit
   const prev = {};
 
   // --- Cache keys for localStorage ---
@@ -755,6 +756,15 @@ html, body {
     try {
       localStorage.setItem(CACHE_KEY_META, JSON.stringify({ subreddits, timestamps: cachedTimestamps }));
     } catch(e) {}
+  }
+
+  function saveTabOrder(newOrder) {
+    saveMetaCache(newOrder);
+    fetch('/api/settings/subreddits', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subreddits: newOrder })
+    }).catch(() => {}); // fire-and-forget, non-critical
   }
 
   function clearCache() {
@@ -785,6 +795,7 @@ html, body {
   });
 
   function show(cat, btn) {
+    currentCat = cat;
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     btn.classList.add('active');
     // Move panes-track to correct position
@@ -845,25 +856,20 @@ html, body {
   }
 
   function initializeTabs(subreddits) {
-    // --- Improved Drag-up gesture for refresh ---
-    // Move this logic inside the forEach loop so 'tab' is defined
-      // Add style for improved drag-up gesture
+      // Add style for tab drag-to-reorder
       const style = document.createElement('style');
       style.innerHTML = `
         .tab.tab-dragging {
-          transition: transform 0.18s cubic-bezier(.4,1.2,.4,1), box-shadow 0.18s, outline-width 0.18s, outline-color 0.18s;
+          transform-origin: center center;
           z-index: 10;
           position: relative;
           will-change: transform;
-        }
-        .tab.tab-refresh-ready {
-          outline-color: var(--accent-green) !important;
-          box-shadow: 0 0 0 4px var(--accent-green), 0 2px 8px rgba(16,185,129,0.18);
-        }
-        .tab.tab-dragging:not(.tab-refresh-ready) {
+          box-shadow: 0 6px 24px rgba(0,0,0,0.45), 0 0 0 2px var(--accent-blue);
           outline-color: var(--accent-blue) !important;
-          box-shadow: 0 0 0 4px var(--accent-blue), 0 2px 8px rgba(59,130,246,0.18);
+          opacity: 0.93;
         }
+        .tab.tab-shift-left  { transition: transform 0.15s ease; }
+        .tab.tab-shift-right { transition: transform 0.15s ease; }
       `;
       document.head.appendChild(style);
     const tabsContainer = document.getElementById('tabs-container');
@@ -882,6 +888,7 @@ html, body {
     CATS.length = 0;
     subreddits.forEach((sr, idx) => {
       CATS.push(sr);
+      if (idx === 0) currentCat = sr;
       // Create tab button
       const tab = document.createElement('button');
       tab.className = idx === 0 ? 'tab active' : 'tab';
@@ -893,100 +900,135 @@ html, body {
         <div class="track"><div class="bar" id="bar-${sr}"></div></div>
         <div style="font-size: 0.65rem; color: #666; margin-top: 4px;" id="ts-${sr}"></div>
       `;
-      // --- Begin improved drag-up gesture for this tab ---
-      let dragStartY = null;
-      let dragStartX = null;
-      let dragMoved = false;
-      let dragTimeout = null;
-      let dragActive = false;
-      const dragThreshold = 48; // px
-      const dragMax = 80; // px, for max visual effect
-      function resetTabDrag() {
+      // --- Drag-to-reorder (long-press then horizontal drag) ---
+      let reorderPointerStart = null; // { x, y, pointerId }
+      let reorderLongPressTimer = null;
+      let reorderActive = false;
+      let reorderStartX = 0; // pointer X at moment drag mode activated
+
+      function cancelReorder() {
+        if (reorderLongPressTimer) { clearTimeout(reorderLongPressTimer); reorderLongPressTimer = null; }
+        reorderActive = false;
+        reorderPointerStart = null;
+        tab.classList.remove('tab-dragging');
         tab.style.transform = '';
-        tab.style.outlineWidth = '';
-        tab.classList.remove('tab-dragging', 'tab-refresh-ready');
-        dragActive = false;
+        // Clear sibling shifts
+        Array.from(tabsContainer.children).forEach(t => {
+          t.style.transform = '';
+          t.classList.remove('tab-shift-left', 'tab-shift-right');
+        });
       }
+
       tab.addEventListener('pointerdown', function(e) {
-        if (e.pointerType !== 'touch' && e.pointerType !== 'mouse') return;
-        dragStartY = e.clientY;
-        dragStartX = e.clientX;
-        dragMoved = false;
-        dragActive = true;
-        tab.setPointerCapture(e.pointerId);
-        dragTimeout = setTimeout(() => { dragStartY = null; resetTabDrag(); }, 1200); // Cancel if held too long
+        if (e.button !== 0 && e.pointerType !== 'touch') return;
+        reorderPointerStart = { x: e.clientX, y: e.clientY, pointerId: e.pointerId };
+        reorderActive = false;
+        reorderLongPressTimer = setTimeout(() => {
+          // Activate drag mode: lift the tab visually
+          reorderActive = true;
+          reorderStartX = reorderPointerStart ? reorderPointerStart.x : e.clientX;
+          tab.setPointerCapture(reorderPointerStart.pointerId);
+          tab.classList.add('tab-dragging');
+          tab.style.transform = 'scale(1.06)';
+        }, 300);
       });
+
       tab.addEventListener('pointermove', function(e) {
-        if (!dragActive || dragStartY === null) return;
-        const dy = e.clientY - dragStartY;
-        const dx = e.clientX - dragStartX;
-        // Only vertical upward drag, ignore horizontal or downward
-        if (Math.abs(dy) < Math.abs(dx) || dy > 0) {
-          resetTabDrag();
+        if (!reorderActive) {
+          // Cancel long-press if moved too much before it fires
+          if (reorderPointerStart && (Math.abs(e.clientX - reorderPointerStart.x) > 8 || Math.abs(e.clientY - reorderPointerStart.y) > 8)) {
+            if (reorderLongPressTimer) { clearTimeout(reorderLongPressTimer); reorderLongPressTimer = null; }
+            reorderPointerStart = null;
+          }
           return;
         }
-        dragMoved = true;
-        tab.classList.add('tab-dragging');
-        // Clamp drag distance for effect
-        const dragDist = Math.max(Math.min(-dy, dragMax), 0);
-        tab.style.transform = `translateY(${-dragDist}px)`;
-        // Outline grows with drag
-        tab.style.outlineWidth = `${1.5 + dragDist / 16}px`;
-        // If threshold passed, outline green
-        if (dragDist >= dragThreshold) {
-          tab.classList.add('tab-refresh-ready');
-        } else {
-          tab.classList.remove('tab-refresh-ready');
-        }
-      });
-      tab.addEventListener('pointerup', async function(e) {
-        if (dragTimeout) clearTimeout(dragTimeout);
-        if (!dragActive || dragStartY === null) { resetTabDrag(); return; }
-        const dy = e.clientY - dragStartY;
-        const dx = e.clientX - dragStartX;
-        dragStartY = null;
-        dragActive = false;
-        // Only upward drag, threshold
-        if (dy < -dragThreshold && Math.abs(dy) > Math.abs(dx)) {
-          tab.classList.add('tab-refresh-ready');
-          tab.disabled = true;
-          // Animate back
-          tab.style.transition = 'transform 0.22s cubic-bezier(.4,1.2,.4,1), outline-width 0.18s';
-          tab.style.transform = '';
-          setTimeout(() => { tab.style.transition = ''; }, 240);
-          // Call backend to refresh this subreddit
-          try {
-            const resp = await fetch('/api/refresh', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ subreddit: sr })
-            });
-            const data = await resp.json();
-            if (data.started) {
-              setPollingRate(2000); // immediately speed up
-              setTimeout(() => { tab.classList.remove('tab-refresh-ready'); }, 1200);
-            } else if (data.error) {
-              alert('Error: ' + data.error);
-              tab.classList.remove('tab-refresh-ready');
-            }
-          } catch (err) {
-            alert('Failed to refresh: ' + err);
-            tab.classList.remove('tab-refresh-ready');
-          } finally {
-            setTimeout(() => { tab.disabled = false; resetTabDrag(); }, 1000);
+        const dx = e.clientX - reorderStartX;
+        tab.style.transform = `translateX(${dx}px) scale(1.06)`;
+
+        // Compute which slot the dragged tab is hovering over
+        const allTabs = Array.from(tabsContainer.children);
+        const draggedIdx = allTabs.indexOf(tab);
+        const draggedRect = tab.getBoundingClientRect();
+        const draggedCenter = e.clientX; // pointer tracks the tab center approximately
+
+        allTabs.forEach((t, i) => {
+          if (t === tab) return;
+          t.classList.add(i < draggedIdx ? 'tab-shift-left' : 'tab-shift-right');
+          const rect = t.getBoundingClientRect();
+          const tabMid = rect.left + rect.width / 2;
+          // If dragged tab center has crossed this sibling's midpoint, shift it
+          if (i < draggedIdx && draggedCenter < tabMid) {
+            t.style.transform = `translateX(${draggedRect.width + 10}px)`;
+          } else if (i > draggedIdx && draggedCenter > tabMid) {
+            t.style.transform = `translateX(-${draggedRect.width + 10}px)`;
+          } else {
+            t.style.transform = '';
           }
-        } else {
-          // Animate back
-          tab.style.transition = 'transform 0.22s cubic-bezier(.4,1.2,.4,1), outline-width 0.18s';
-          tab.style.transform = '';
-          setTimeout(() => { tab.style.transition = ''; resetTabDrag(); }, 240);
+        });
+      });
+
+      tab.addEventListener('pointerup', function(e) {
+        if (reorderLongPressTimer) { clearTimeout(reorderLongPressTimer); reorderLongPressTimer = null; }
+        if (!reorderActive) { reorderPointerStart = null; return; }
+
+        // Determine target insertion index based on pointer X vs sibling midpoints
+        const allTabs = Array.from(tabsContainer.children);
+        const draggedIdx = allTabs.indexOf(tab);
+        let targetIdx = draggedIdx;
+        allTabs.forEach((t, i) => {
+          if (t === tab) return;
+          const rect = t.getBoundingClientRect();
+          const tabMid = rect.left + rect.width / 2;
+          if (i < draggedIdx && e.clientX < tabMid) targetIdx = Math.min(targetIdx, i);
+          if (i > draggedIdx && e.clientX > tabMid) targetIdx = i;
+        });
+
+        // Reset all transforms before reordering DOM
+        tab.classList.remove('tab-dragging');
+        tab.style.transform = '';
+        allTabs.forEach(t => {
+          t.style.transform = '';
+          t.classList.remove('tab-shift-left', 'tab-shift-right');
+        });
+
+        // Reorder tab DOM
+        if (targetIdx !== draggedIdx) {
+          const ref = allTabs[targetIdx];
+          if (targetIdx < draggedIdx) {
+            tabsContainer.insertBefore(tab, ref);
+          } else {
+            tabsContainer.insertBefore(tab, ref.nextSibling);
+          }
+          // Reorder pane DOM to match
+          const panesTrack = document.getElementById('panes-track');
+          const pane = document.getElementById('pane-' + sr);
+          const allPanes = Array.from(panesTrack.children);
+          const refPane = allPanes[targetIdx];
+          if (targetIdx < draggedIdx) {
+            panesTrack.insertBefore(pane, refPane);
+          } else {
+            panesTrack.insertBefore(pane, refPane ? refPane.nextSibling : null);
+          }
+          // Update CATS array order
+          const newOrder = Array.from(tabsContainer.children).map(t => t.getAttribute('data-cat'));
+          CATS.length = 0;
+          newOrder.forEach(c => CATS.push(c));
+          // Persist new order
+          saveTabOrder(newOrder);
+          // Re-sync pane position so currently active pane stays in view
+          const activeIdx = CATS.indexOf(currentCat);
+          if (activeIdx >= 0) {
+            const panesContainer = document.getElementById('panes-container');
+            document.getElementById('panes-track').style.transform = `translateX(-${activeIdx * panesContainer.offsetWidth}px)`;
+          }
         }
+
+        reorderActive = false;
+        reorderPointerStart = null;
       });
-      tab.addEventListener('pointerleave', function() {
-        if (dragTimeout) clearTimeout(dragTimeout);
-        resetTabDrag();
-      });
-      // --- End improved drag-up gesture ---
+
+      tab.addEventListener('pointercancel', cancelReorder);
+      // --- End drag-to-reorder ---
       tabsContainer.appendChild(tab);
       // Create pane
       const pane = document.createElement('div');
