@@ -924,12 +924,14 @@ html, body {
         if (e.button !== 0 && e.pointerType !== 'touch') return;
         reorderPointerStart = { x: e.clientX, y: e.clientY, pointerId: e.pointerId };
         reorderActive = false;
+        // Capture immediately so we can track movement; release it if scroll starts
+        tab.setPointerCapture(e.pointerId);
         reorderLongPressTimer = setTimeout(() => {
+          if (!reorderPointerStart) return; // was released/scrolled
           // Activate drag mode: lift the tab visually
           if (window.getSelection) window.getSelection().removeAllRanges();
           reorderActive = true;
-          reorderStartX = reorderPointerStart ? reorderPointerStart.x : e.clientX;
-          tab.setPointerCapture(reorderPointerStart.pointerId);
+          reorderStartX = reorderPointerStart.x;
           tab.classList.add('tab-dragging');
           tab.style.transform = 'scale(1.06)';
         }, 300);
@@ -937,9 +939,10 @@ html, body {
 
       tab.addEventListener('pointermove', function(e) {
         if (!reorderActive) {
-          // Cancel long-press if moved too much before it fires
-          if (reorderPointerStart && (Math.abs(e.clientX - reorderPointerStart.x) > 8 || Math.abs(e.clientY - reorderPointerStart.y) > 8)) {
+          // If significant horizontal movement before long-press fires, release capture so scroll works
+          if (reorderPointerStart && Math.abs(e.clientX - reorderPointerStart.x) > 6) {
             if (reorderLongPressTimer) { clearTimeout(reorderLongPressTimer); reorderLongPressTimer = null; }
+            tab.releasePointerCapture(e.pointerId);
             reorderPointerStart = null;
           }
           return;
