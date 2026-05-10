@@ -185,7 +185,7 @@ html, body {
     .tab  { flex-shrink: 0; min-width: 140px; padding: 10px 12px 8px;
       border-radius: 12px; border: 1.5px solid var(--border-main); outline: 1.5px solid var(--border-main); outline-offset: -2px;
       background: var(--bg-card); cursor: pointer; text-align: left; color: var(--text-main);
-      user-select: none; -webkit-user-select: none; touch-action: none; -webkit-tap-highlight-color: transparent; }
+      user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
     .tab .name  { font-size: 0.85rem; font-weight: 700; margin-bottom: 6px; }
     .tab .info  { display: flex; justify-content: space-between;
       font-size: 0.68rem; margin-bottom: 5px; }
@@ -913,6 +913,7 @@ html, body {
         reorderPointerStart = null;
         tab.classList.remove('tab-dragging');
         tab.style.transform = '';
+        tab.style.touchAction = ''; // restore scroll
         // Clear sibling shifts
         Array.from(tabsContainer.children).forEach(t => {
           t.style.transform = '';
@@ -928,6 +929,7 @@ html, body {
         reorderLongPressTimer = setTimeout(() => {
           // Activate drag mode: lift the tab visually
           if (window.getSelection) window.getSelection().removeAllRanges(); // clear any selection
+          tab.style.touchAction = 'none'; // disable scroll only while dragging
           reorderActive = true;
           reorderStartX = reorderPointerStart ? reorderPointerStart.x : e.clientX;
           tab.setPointerCapture(reorderPointerStart.pointerId);
@@ -989,6 +991,7 @@ html, body {
         // Reset all transforms before reordering DOM
         tab.classList.remove('tab-dragging');
         tab.style.transform = '';
+        tab.style.touchAction = ''; // restore scroll
         allTabs.forEach(t => {
           t.style.transform = '';
           t.classList.remove('tab-shift-left', 'tab-shift-right');
