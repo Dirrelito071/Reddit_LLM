@@ -3,7 +3,6 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <link rel="manifest" href="/manifest.json">
 <title>Reddit Daily Digest</title>
@@ -484,11 +483,15 @@ html, body {
         setTrackTranslate(-activeIdx * paneWidth);
       }
       window.addEventListener('resize', onResize);
+      // Direction-lock state for swipe vs scroll disambiguation
+      let directionLocked = null; // null | 'horizontal' | 'vertical'
+      const SWIPE_LOCK_THRESHOLD = 10; // px of movement before direction is decided
       // Touch events
       panesContainer.addEventListener('touchstart', function(e) {
         animating = false; // Always allow new swipe to interrupt animation
         if (e.touches.length !== 1) return;
         isDragging = true;
+        directionLocked = null; // Reset direction on each new touch
         updatePaneWidth();
         nPanes = panesTrack.children.length;
         activeIdx = getActiveIndex();
@@ -496,20 +499,31 @@ html, body {
         touchStartY = lastTouchY = e.touches[0].clientY;
         startTranslate = -activeIdx * paneWidth;
         setTrackTransition(false);
-        // Visual feedback: add .pane-dragging to active pane
-        const panes = panesTrack.children;
-        if (panes[activeIdx]) panes[activeIdx].classList.add('pane-dragging');
+        // Do NOT add .pane-dragging here — wait for confirmed horizontal intent
       });
       panesContainer.addEventListener('touchmove', function(e) {
         if (!isDragging) return;
         const touch = e.touches[0];
         const dx = touch.clientX - touchStartX;
         const dy = touch.clientY - touchStartY;
-        // Only handle horizontal drags
-        if (Math.abs(dx) > Math.abs(dy)) {
+        // Lock direction once movement exceeds threshold
+        if (directionLocked === null && (Math.abs(dx) > SWIPE_LOCK_THRESHOLD || Math.abs(dy) > SWIPE_LOCK_THRESHOLD)) {
+          directionLocked = Math.abs(dx) >= Math.abs(dy) ? 'horizontal' : 'vertical';
+        }
+        if (directionLocked === 'vertical') {
+          // Let native scroll handle it; remove any stale pane-dragging
+          Array.from(panesTrack.children).forEach(p => p.classList.remove('pane-dragging'));
+          lastTouchX = touch.clientX;
+          lastTouchY = touch.clientY;
+          return;
+        }
+        if (directionLocked === 'horizontal') {
           e.preventDefault();
+          // Horizontal intent confirmed — now apply the zoom-out effect
+          const panes = panesTrack.children;
+          if (panes[activeIdx]) panes[activeIdx].classList.add('pane-dragging');
           let offset = startTranslate + dx;
-          // Looping: allow dragging beyond edges, but with resistance
+          // Resistance at edges
           if (activeIdx === 0 && dx > 0) offset = startTranslate + dx * 0.3;
           if (activeIdx === nPanes - 1 && dx < 0) offset = startTranslate + dx * 0.3;
           setTrackTranslate(offset);
