@@ -25,6 +25,24 @@
             background: var(--bg-main);
           }
         }
+        /* Pull-to-refresh indicator */
+        #pull-indicator {
+          position: absolute;
+          top: 0; left: 0; right: 0;
+          height: 52px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 0.78rem;
+          font-weight: 600;
+          color: var(--accent-blue);
+          pointer-events: none;
+          opacity: 0;
+          transform: translateY(-100%);
+          transition: opacity 0.12s, transform 0.12s;
+          z-index: 5;
+          letter-spacing: 0.02em;
+        }
         /* Visual feedback for swipe drag */
         .pane-dragging {
           box-shadow: 0 8px 32px 0 rgba(60,60,100,0.18), 0 1.5px 0 #232946;
@@ -486,6 +504,17 @@ html, body {
       // Direction-lock state for swipe vs scroll disambiguation
       let directionLocked = null; // null | 'horizontal' | 'vertical'
       const SWIPE_LOCK_THRESHOLD = 10; // px of movement before direction is decided
+      // Pull-to-refresh state
+      let pullActive = false;
+      let pullDistance = 0;
+      let startedAtScrollTop = false;
+      const PULL_THRESHOLD = 80;  // px to trigger refresh
+      const PULL_MAX = 110;       // px max visual travel
+      // Pull indicator element
+      const pullIndicator = document.createElement('div');
+      pullIndicator.id = 'pull-indicator';
+      pullIndicator.textContent = '↓ Pull to refresh';
+      panesContainer.appendChild(pullIndicator);
       // Touch events
       panesContainer.addEventListener('touchstart', function(e) {
         animating = false; // Always allow new swipe to interrupt animation
@@ -499,6 +528,11 @@ html, body {
         touchStartY = lastTouchY = e.touches[0].clientY;
         startTranslate = -activeIdx * paneWidth;
         setTrackTransition(false);
+        // Record whether pane was at scroll top (needed for pull-to-refresh)
+        const activePaneEl = panesTrack.children[activeIdx];
+        startedAtScrollTop = activePaneEl ? activePaneEl.scrollTop === 0 : false;
+        pullActive = false;
+        pullDistance = 0;
         // Do NOT add .pane-dragging here — wait for confirmed horizontal intent
       });
       panesContainer.addEventListener('touchmove', function(e) {
@@ -513,6 +547,21 @@ html, body {
         if (directionLocked === 'vertical') {
           // Let native scroll handle it; remove any stale pane-dragging
           Array.from(panesTrack.children).forEach(p => p.classList.remove('pane-dragging'));
+          // Pull-to-refresh: track downward drag when pane was at top
+          if (startedAtScrollTop && dy > 0) {
+            e.preventDefault(); // suppress iOS rubber-band bounce during pull
+            pullActive = true;
+            pullDistance = Math.min(dy, PULL_MAX);
+            const ratio = pullDistance / PULL_THRESHOLD;
+            pullIndicator.style.opacity = Math.min(ratio, 1);
+            pullIndicator.style.transform = `translateY(-${Math.max(0, 100 - ratio * 100)}%)`;
+            pullIndicator.textContent = pullDistance >= PULL_THRESHOLD ? '↑ Release to refresh' : '↓ Pull to refresh';
+          } else {
+            pullActive = false;
+            pullDistance = 0;
+            pullIndicator.style.opacity = '0';
+            pullIndicator.style.transform = 'translateY(-100%)';
+          }
           lastTouchX = touch.clientX;
           lastTouchY = touch.clientY;
           return;
@@ -536,6 +585,28 @@ html, body {
         isDragging = false;
         // Remove .pane-dragging from all panes
         Array.from(panesTrack.children).forEach(pane => pane.classList.remove('pane-dragging'));
+        // Pull-to-refresh: fire if threshold met
+        if (pullActive && pullDistance >= PULL_THRESHOLD) {
+          const subreddit = panesTrack.children[activeIdx] && panesTrack.children[activeIdx].getAttribute('data-pane');
+          if (subreddit) {
+            pullIndicator.textContent = '↻ Refreshing…';
+            if (typeof setPollingRate === 'function') setPollingRate(2000);
+            fetch('/api/refresh', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ subreddit })
+            }).catch(() => {});
+            setTimeout(() => {
+              pullIndicator.style.opacity = '0';
+              pullIndicator.style.transform = 'translateY(-100%)';
+            }, 1200);
+          }
+        } else {
+          pullIndicator.style.opacity = '0';
+          pullIndicator.style.transform = 'translateY(-100%)';
+        }
+        pullActive = false;
+        pullDistance = 0;
         const dx = lastTouchX - touchStartX;
         // Threshold: 30% of pane width
         let newIdx = activeIdx;
@@ -552,6 +623,11 @@ html, body {
         isDragging = false;
         // Remove .pane-dragging from all panes
         Array.from(panesTrack.children).forEach(pane => pane.classList.remove('pane-dragging'));
+        // Clean up pull state
+        pullActive = false;
+        pullDistance = 0;
+        pullIndicator.style.opacity = '0';
+        pullIndicator.style.transform = 'translateY(-100%)';
         switchToIndex(activeIdx);
       });
       // Initial setup
