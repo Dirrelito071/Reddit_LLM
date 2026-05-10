@@ -17,9 +17,8 @@ def set_llm_model(model):
         return False
     return set_setting("llm_model", model)
 def purge_old_posts(subreddit, days=7):
-    """Delete posts older than N days for a subreddit."""
+    """Delete posts older than N days (by Reddit creation date) for a subreddit."""
     import time
-    days = 3 if days == 7 else days  # Default to 3 days if called without explicit days
     cutoff = time.time() - days * 86400
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
@@ -537,3 +536,22 @@ def set_llm_question(question):
         logger.error("Cannot set empty LLM question")
         return False
     return set_setting("llm_question", question)
+
+
+def get_purge_days():
+    """Get post age limit in days (default 14)"""
+    stored = get_setting("purge_days")
+    if stored:
+        try:
+            return int(stored)
+        except Exception:
+            pass
+    return 14
+
+
+def set_purge_days(days):
+    """Store post age limit in days. Allowed values: 7, 14, 21, 28."""
+    if days not in (7, 14, 21, 28):
+        logger.error(f"Invalid purge_days value: {days}")
+        return False
+    return set_setting("purge_days", str(days))

@@ -399,6 +399,7 @@ html, body {
       <button class="settings-tab active" data-tab="subreddits">Subreddits</button>
       <button class="settings-tab" data-tab="llm">LLM Question</button>
       <button class="settings-tab" data-tab="model">Model</button>
+      <button class="settings-tab" data-tab="pipeline">Pipeline</button>
     </div>
     
     <!-- Subreddits Tab -->
@@ -433,6 +434,19 @@ html, body {
         <label class="form-label">Model (Ollama):</label>
         <select id="llm-model" class="form-input"></select>
         <p class="info-text">Choose which LLM model to use for summarization. Only models available in Ollama are shown.</p>
+      </div>
+    </div>
+    <!-- Pipeline Tab -->
+    <div id="tab-pipeline" class="settings-content">
+      <div class="form-group">
+        <label class="form-label">Post age limit:</label>
+        <select id="purge-days" class="form-input">
+          <option value="7">1 week</option>
+          <option value="14">2 weeks</option>
+          <option value="21">3 weeks</option>
+          <option value="28">4 weeks</option>
+        </select>
+        <p class="info-text">Posts older than this are purged from the database and skipped in the RSS feed.</p>
       </div>
     </div>
     
@@ -1216,6 +1230,13 @@ html, body {
       const question = data.llm_question || 'Summarize the following Reddit posts';
       llmQuestion.value = question;
 
+      // Load purge days
+      const purgeDaysSelect = document.getElementById('purge-days');
+      if (purgeDaysSelect) {
+        const purgeVal = String(data.purge_days || 14);
+        Array.from(purgeDaysSelect.options).forEach(o => { o.selected = o.value === purgeVal; });
+      }
+
       // Load models
       llmModelSelect.innerHTML = '';
       const models = (modelsData.models || []);
@@ -1388,6 +1409,20 @@ html, body {
       if (!mResponse.ok) {
         const error = await mResponse.json();
         throw new Error(error.error || 'Failed to save model');
+      }
+
+      // Save purge days
+      const purgeDaysEl = document.getElementById('purge-days');
+      if (purgeDaysEl) {
+        const pResponse = await fetch('/api/settings/purge-days', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ days: parseInt(purgeDaysEl.value) })
+        });
+        if (!pResponse.ok) {
+          const error = await pResponse.json();
+          throw new Error(error.error || 'Failed to save purge days');
+        }
       }
 
       // Success

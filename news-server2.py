@@ -143,6 +143,8 @@ class NewsHandler(BaseHTTPRequestHandler):
             self.handle_question_settings()
         elif path == "/api/settings/model":
             self.handle_model_settings()
+        elif path == "/api/settings/purge-days":
+            self.handle_purge_days_settings()
         elif path == "/api/refresh":
             self.handle_refresh_subreddit()
         else:
@@ -274,11 +276,13 @@ class NewsHandler(BaseHTTPRequestHandler):
         subreddits = db.get_subreddits()
         llm_question = db.get_llm_question()
         llm_model = db.get_llm_model()
+        purge_days = db.get_purge_days()
         response = {
             "running": pipeline_running,
             "subreddits": subreddits,
             "llm_question": llm_question,
             "llm_model": llm_model,
+            "purge_days": purge_days,
             "status": status,
             "last_run_time": last_run_time,
             "next_run_time": next_run_time.isoformat() if next_run_time else None
@@ -369,6 +373,25 @@ class NewsHandler(BaseHTTPRequestHandler):
             logger.error(f"Error handling subreddit settings: {e}")
             self.send_json({"error": str(e)})
     
+    def handle_purge_days_settings(self):
+        """Handle POST /api/settings/purge-days - update post age limit"""
+        try:
+            content_length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(content_length).decode('utf-8')
+            data = json.loads(body)
+            days = data.get("days")
+            if days not in (7, 14, 21, 28):
+                self.send_json({"error": "days must be 7, 14, 21, or 28"})
+                return
+            if db.set_purge_days(days):
+                logger.info(f"Purge days updated: {days}")
+                self.send_json({"success": True, "days": days})
+            else:
+                self.send_json({"error": "Failed to save purge days"})
+        except Exception as e:
+            logger.error(f"Error handling purge days settings: {e}")
+            self.send_json({"error": str(e)})
+
     def handle_question_settings(self):
         """Handle POST /api/settings/question - update LLM question"""
         try:

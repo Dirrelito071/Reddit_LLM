@@ -48,8 +48,9 @@ for subreddit in subreddits_to_process:
     print(f"Processing r/{subreddit}...")
     print(f"{'=' * 80}")
 
-    # Step 0: Purge old posts (older than 7 days)
-    db.purge_old_posts(subreddit)
+    # Step 0: Purge posts older than configured limit (by Reddit creation date)
+    purge_days = db.get_purge_days()
+    db.purge_old_posts(subreddit, days=purge_days)
     db.update_progress(subreddit, "collecting", 0, 0, subphase="rss", current=0, total=25)
     rss_post_ids = set()
 
@@ -102,7 +103,6 @@ for subreddit in subreddits_to_process:
             print(f"  [{i}/25] ✗ Could not extract post ID")
             error_count += 1
             continue
-        rss_post_ids.add(post_id)
 
         api_url = post_url.rstrip('/') + '.json'
         try:
@@ -111,6 +111,14 @@ for subreddit in subreddits_to_process:
             api_data = api_response.json()
             if isinstance(api_data, list) and len(api_data) > 0:
                 post_data = api_data[0]['data']['children'][0]['data']
+
+                # Skip posts older than configured limit
+                created_utc = post_data.get('created_utc', 0)
+                if created_utc and created_utc < time.time() - purge_days * 86400:
+                    print(f"  [{i}/25] ✗ Too old (>{purge_days}d): {title}")
+                    continue
+
+                rss_post_ids.add(post_id)
                 store_data = {
                     'id': post_id,
                     'subreddit': subreddit,
