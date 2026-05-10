@@ -29,18 +29,42 @@
         #pull-indicator {
           position: absolute;
           top: 0; left: 0; right: 0;
-          height: 52px;
+          height: 64px;
           display: flex;
+          flex-direction: column;
           align-items: center;
           justify-content: center;
-          font-size: 0.78rem;
-          font-weight: 600;
-          color: var(--accent-blue);
+          gap: 4px;
           pointer-events: none;
           opacity: 0;
           transform: translateY(-100%);
           transition: opacity 0.12s, transform 0.12s;
           z-index: 5;
+        }
+        #pull-indicator svg {
+          width: 28px; height: 28px;
+          stroke: var(--accent-blue);
+          fill: none;
+          stroke-width: 2.2;
+          stroke-linecap: round;
+          stroke-linejoin: round;
+          transform: rotate(0deg);
+          transition: transform 0.22s cubic-bezier(.4,1.4,.4,1);
+        }
+        #pull-indicator.pull-ready svg {
+          transform: rotate(180deg);
+        }
+        @keyframes pull-spin {
+          to { transform: rotate(360deg); }
+        }
+        #pull-indicator.pull-spinning svg {
+          animation: pull-spin 0.7s linear infinite;
+          transition: none;
+        }
+        #pull-indicator .pull-label {
+          font-size: 0.72rem;
+          font-weight: 600;
+          color: var(--accent-blue);
           letter-spacing: 0.02em;
         }
         /* Visual feedback for swipe drag */
@@ -510,11 +534,18 @@ html, body {
       let startedAtScrollTop = false;
       const PULL_THRESHOLD = 80;  // px to trigger refresh
       const PULL_MAX = 110;       // px max visual travel
-      // Pull indicator element
+      // Pull indicator element — SVG circular arrow + label
       const pullIndicator = document.createElement('div');
       pullIndicator.id = 'pull-indicator';
-      pullIndicator.textContent = '↓ Pull to refresh';
+      pullIndicator.innerHTML = `
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 4a8 8 0 1 0 8 8" />
+          <polyline points="16 4 12 4 12 8" />
+        </svg>
+        <span class="pull-label">Pull to refresh</span>`;
       panesContainer.appendChild(pullIndicator);
+      const pullSvg = pullIndicator.querySelector('svg');
+      const pullLabel = pullIndicator.querySelector('.pull-label');
       // Touch events
       panesContainer.addEventListener('touchstart', function(e) {
         animating = false; // Always allow new swipe to interrupt animation
@@ -551,14 +582,35 @@ html, body {
           if (startedAtScrollTop && dy > 0) {
             e.preventDefault(); // suppress iOS rubber-band bounce during pull
             pullActive = true;
-            pullDistance = Math.min(dy, PULL_MAX);
+            // Rubber-band resistance curve — decelerates naturally
+            pullDistance = PULL_MAX * (1 - Math.exp(-dy / PULL_MAX));
             const ratio = pullDistance / PULL_THRESHOLD;
-            pullIndicator.style.opacity = Math.min(ratio, 1);
-            pullIndicator.style.transform = `translateY(-${Math.max(0, 100 - ratio * 100)}%)`;
-            pullIndicator.textContent = pullDistance >= PULL_THRESHOLD ? '↑ Release to refresh' : '↓ Pull to refresh';
+            const clampedRatio = Math.min(ratio, 1);
+            // Slide indicator in
+            pullIndicator.style.opacity = clampedRatio;
+            pullIndicator.style.transform = `translateY(-${Math.max(0, 100 - clampedRatio * 100)}%)`;
+            // Rotate SVG icon proportionally (0° → 180°), class takes over at threshold
+            const crossed = pullDistance >= PULL_THRESHOLD;
+            if (crossed) {
+              pullIndicator.classList.add('pull-ready');
+              pullSvg.style.transform = '';
+              pullLabel.textContent = 'Release to refresh';
+            } else {
+              pullIndicator.classList.remove('pull-ready');
+              pullSvg.style.transform = `rotate(${ratio * 180}deg)`;
+              pullLabel.textContent = 'Pull to refresh';
+            }
+            // Pane follows finger with resistance
+            const activePaneEl = panesTrack.children[activeIdx];
+            if (activePaneEl) {
+              activePaneEl.style.transition = 'none';
+              activePaneEl.style.transform = `translateY(${pullDistance * 0.45}px)`;
+            }
           } else {
             pullActive = false;
             pullDistance = 0;
+            pullIndicator.classList.remove('pull-ready');
+            pullSvg.style.transform = '';
             pullIndicator.style.opacity = '0';
             pullIndicator.style.transform = 'translateY(-100%)';
           }
@@ -585,11 +637,20 @@ html, body {
         isDragging = false;
         // Remove .pane-dragging from all panes
         Array.from(panesTrack.children).forEach(pane => pane.classList.remove('pane-dragging'));
+        // Spring pane back to position
+        const activePaneEl = panesTrack.children[activeIdx];
+        if (activePaneEl) {
+          activePaneEl.style.transition = 'transform 0.42s cubic-bezier(.4,1.5,.4,1)';
+          activePaneEl.style.transform = 'translateY(0)';
+          setTimeout(() => { activePaneEl.style.transition = ''; activePaneEl.style.transform = ''; }, 440);
+        }
         // Pull-to-refresh: fire if threshold met
         if (pullActive && pullDistance >= PULL_THRESHOLD) {
           const subreddit = panesTrack.children[activeIdx] && panesTrack.children[activeIdx].getAttribute('data-pane');
           if (subreddit) {
-            pullIndicator.textContent = '↻ Refreshing…';
+            pullIndicator.classList.remove('pull-ready');
+            pullIndicator.classList.add('pull-spinning');
+            pullLabel.textContent = 'Refreshing…';
             if (typeof setPollingRate === 'function') setPollingRate(2000);
             fetch('/api/refresh', {
               method: 'POST',
@@ -597,11 +658,16 @@ html, body {
               body: JSON.stringify({ subreddit })
             }).catch(() => {});
             setTimeout(() => {
+              pullIndicator.classList.remove('pull-spinning');
               pullIndicator.style.opacity = '0';
               pullIndicator.style.transform = 'translateY(-100%)';
-            }, 1200);
+              pullSvg.style.transform = '';
+              pullLabel.textContent = 'Pull to refresh';
+            }, 1400);
           }
         } else {
+          pullIndicator.classList.remove('pull-ready', 'pull-spinning');
+          pullSvg.style.transform = '';
           pullIndicator.style.opacity = '0';
           pullIndicator.style.transform = 'translateY(-100%)';
         }
@@ -623,11 +689,19 @@ html, body {
         isDragging = false;
         // Remove .pane-dragging from all panes
         Array.from(panesTrack.children).forEach(pane => pane.classList.remove('pane-dragging'));
-        // Clean up pull state
+        // Clean up pull state + spring pane back
         pullActive = false;
         pullDistance = 0;
+        pullIndicator.classList.remove('pull-ready', 'pull-spinning');
+        pullSvg.style.transform = '';
         pullIndicator.style.opacity = '0';
         pullIndicator.style.transform = 'translateY(-100%)';
+        const cancelPaneEl = panesTrack.children[activeIdx];
+        if (cancelPaneEl) {
+          cancelPaneEl.style.transition = 'transform 0.42s cubic-bezier(.4,1.5,.4,1)';
+          cancelPaneEl.style.transform = 'translateY(0)';
+          setTimeout(() => { cancelPaneEl.style.transition = ''; cancelPaneEl.style.transform = ''; }, 440);
+        }
         switchToIndex(activeIdx);
       });
       // Initial setup
