@@ -913,7 +913,6 @@ html, body {
         reorderPointerStart = null;
         tab.classList.remove('tab-dragging');
         tab.style.transform = '';
-        tab.style.touchAction = ''; // restore scroll
         // Clear sibling shifts
         Array.from(tabsContainer.children).forEach(t => {
           t.style.transform = '';
@@ -923,13 +922,11 @@ html, body {
 
       tab.addEventListener('pointerdown', function(e) {
         if (e.button !== 0 && e.pointerType !== 'touch') return;
-        e.preventDefault(); // prevent text selection on long-press
         reorderPointerStart = { x: e.clientX, y: e.clientY, pointerId: e.pointerId };
         reorderActive = false;
         reorderLongPressTimer = setTimeout(() => {
           // Activate drag mode: lift the tab visually
-          if (window.getSelection) window.getSelection().removeAllRanges(); // clear any selection
-          tab.style.touchAction = 'none'; // disable scroll only while dragging
+          if (window.getSelection) window.getSelection().removeAllRanges();
           reorderActive = true;
           reorderStartX = reorderPointerStart ? reorderPointerStart.x : e.clientX;
           tab.setPointerCapture(reorderPointerStart.pointerId);
@@ -991,7 +988,6 @@ html, body {
         // Reset all transforms before reordering DOM
         tab.classList.remove('tab-dragging');
         tab.style.transform = '';
-        tab.style.touchAction = ''; // restore scroll
         allTabs.forEach(t => {
           t.style.transform = '';
           t.classList.remove('tab-shift-left', 'tab-shift-right');
