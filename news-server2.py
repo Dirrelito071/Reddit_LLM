@@ -227,6 +227,9 @@ class NewsHandler(BaseHTTPRequestHandler):
                 if subreddit in progress:
                     p = progress[subreddit]
                     phase = p["phase"]
+                    # If pipeline is not running, active phases are stale — show idle instead
+                    if not pipeline_running and phase in ("collecting", "summarizing", "backoff"):
+                        phase = "idle"
                     subphase = p.get("subphase")
                     pct = p["pct"]
                     current = p.get("current", 0)
