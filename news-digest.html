@@ -605,11 +605,13 @@ html, body {
               pullSvg.style.transform = `rotate(${ratio * 180}deg)`;
               pullLabel.textContent = 'Pull to refresh';
             }
-            // Pane follows finger with resistance
+            // Pane follows finger with resistance + dims as you pull
             const activePaneEl = panesTrack.children[activeIdx];
             if (activePaneEl) {
               activePaneEl.style.transition = 'none';
               activePaneEl.style.transform = `translateY(${pullDistance * 0.45}px)`;
+              const dimRatio = Math.min(pullDistance / PULL_MAX, 1);
+              activePaneEl.style.opacity = 1 - dimRatio * 0.5;
             }
           } else {
             pullActive = false;
@@ -645,9 +647,10 @@ html, body {
         // Spring pane back to position
         const activePaneEl = panesTrack.children[activeIdx];
         if (activePaneEl) {
-          activePaneEl.style.transition = 'transform 0.42s cubic-bezier(.4,1.5,.4,1)';
+          activePaneEl.style.transition = 'transform 0.42s cubic-bezier(.4,1.5,.4,1), opacity 0.42s ease';
           activePaneEl.style.transform = 'translateY(0)';
-          setTimeout(() => { activePaneEl.style.transition = ''; activePaneEl.style.transform = ''; }, 440);
+          activePaneEl.style.opacity = '';
+          setTimeout(() => { activePaneEl.style.transition = ''; activePaneEl.style.transform = ''; activePaneEl.style.opacity = ''; }, 440);
         }
         // Pull-to-refresh: fire if threshold met
         if (pullActive && pullDistance >= PULL_THRESHOLD) {
@@ -703,9 +706,10 @@ html, body {
         pullIndicator.style.transform = 'translateY(-100%)';
         const cancelPaneEl = panesTrack.children[activeIdx];
         if (cancelPaneEl) {
-          cancelPaneEl.style.transition = 'transform 0.42s cubic-bezier(.4,1.5,.4,1)';
+          cancelPaneEl.style.transition = 'transform 0.42s cubic-bezier(.4,1.5,.4,1), opacity 0.42s ease';
           cancelPaneEl.style.transform = 'translateY(0)';
-          setTimeout(() => { cancelPaneEl.style.transition = ''; cancelPaneEl.style.transform = ''; }, 440);
+          cancelPaneEl.style.opacity = '';
+          setTimeout(() => { cancelPaneEl.style.transition = ''; cancelPaneEl.style.transform = ''; cancelPaneEl.style.opacity = ''; }, 440);
         }
         switchToIndex(activeIdx);
       });

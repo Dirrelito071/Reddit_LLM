@@ -80,8 +80,8 @@ for (subreddit,) in subreddits:
         short_title = title[:50] + "..." if len(title) > 50 else title
         
         # Update progress before processing (shows current post being worked on)
-        pct = int(((i - 1) / len(posts_to_process)) * 100)
-        db.update_progress(subreddit, "summarizing", pct, len(posts_to_process), current=i-1, total=len(posts_to_process))
+        pct = int((i / len(posts_to_process)) * 100)
+        db.update_progress(subreddit, "summarizing", pct, len(posts_to_process), current=i, total=len(posts_to_process))
         
         post_start = time.time()
         print(f"  [{i}/{len(posts_to_process)}] Processing: {short_title}")
