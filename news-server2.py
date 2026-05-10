@@ -60,7 +60,7 @@ import sys
 import threading
 import time
 from pathlib import Path
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from urllib.parse import urlparse
 
 import config
@@ -498,7 +498,7 @@ if __name__ == "__main__":
     logger.info("=" * 80 + "\n")
 
     try:
-        with HTTPServer(("0.0.0.0", PORT), NewsHandler) as httpd:
+        with ThreadingHTTPServer(("0.0.0.0", PORT), NewsHandler) as httpd:
             httpd.serve_forever()
     except KeyboardInterrupt:
         logger.info("\n\nServer stopped.")
