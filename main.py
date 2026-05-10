@@ -140,7 +140,9 @@ for subreddit in subreddits_to_process:
                     new_count += 1
                 else:
                     old_json, current_status = row[0], row[1]
-                    if json.dumps(api_data, sort_keys=True) == old_json:
+                    old_fingerprint = db.extract_post_fingerprint(json.loads(old_json))
+                    new_fingerprint = db.extract_post_fingerprint(api_data)
+                    if old_fingerprint == new_fingerprint:
                         if current_status != 'summarized':
                             db.update_post_status(post_id, "stale")
                         print(f"  [{i}/25] ⊘ Stale: {title}")
@@ -204,7 +206,9 @@ for subreddit in subreddits_to_process:
                     'url': post_url,
                     'created_utc': post_data.get('created_utc'),
                 }
-                if json.dumps(api_data, sort_keys=True) == old_json:
+                old_fingerprint = db.extract_post_fingerprint(json.loads(old_json))
+                new_fingerprint = db.extract_post_fingerprint(api_data)
+                if old_fingerprint == new_fingerprint:
                     db.update_post_status(post_id, "stale")
                     print(f"  [U{idx}] ⊘ Stale: {store_data['title']}")
                 else:

@@ -197,6 +197,23 @@ def post_exists(post_id):
         return None
 
 
+def extract_post_fingerprint(api_data):
+    """Extract only meaningful fields from Reddit API JSON for change detection.
+    Ignores volatile fields like signed thumbnail URLs, modhash, subscriber counts."""
+    try:
+        post = api_data[0]['data']['children'][0]['data']
+        return {
+            'score': post.get('score'),
+            'num_comments': post.get('num_comments'),
+            'selftext': post.get('selftext'),
+            'title': post.get('title'),
+            'edited': post.get('edited'),
+            'locked': post.get('locked'),
+        }
+    except (IndexError, KeyError, TypeError):
+        return None
+
+
 def content_changed(post_id, new_score, new_num_comments):
     """Check if post metrics have changed (score or comments)"""
     existing = post_exists(post_id)
