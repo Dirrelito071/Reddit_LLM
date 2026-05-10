@@ -1,3 +1,5 @@
+<!-- ARCHIVED — April 2026 implementation history. Not maintained. See CLAUDE.MD for current reference. -->
+
 # Settings Panel Implementation - Complete
 
 ## Overview

@@ -1,18 +1,17 @@
-# Reddit LLM System - Project Documentation
+# Reddit LLM System — Project Documentation
+<!-- Last updated: 10 May 2026 -->
 
 ## Project Goal
-Create a trending posts digest/newsflow by:
-1. Collecting Reddit posts from configured subreddits
-2. Storing posts with smart deduplication and content tracking
-3. Processing posts through an LLM to generate newsworthy 5-sentence summaries
-4. Building a digest of trending/important discussions
+A scheduled Reddit digest app that collects posts from configured subreddits, summarises them with a local LLM, and serves a mobile-friendly web dashboard with real-time progress tracking.
 
-## Current Phase
-**Phase 4 (IN PROGRESS):** Web dashboard with real-time progress tracking
-- Phase 1 (COMPLETE): Simple architecture with RSS + API
-- Phase 2 (COMPLETE): Database with smart deduplication
-- Phase 3 (COMPLETE): LLM processing for 5-sentence summaries
-- Phase 4 (IN PROGRESS): Web dashboard with live progress + timestamps
+## Current State (May 2026)
+- **Fully deployed** on a home server via Docker, accessible via Tailscale
+- **Pipeline runs automatically** at 00:00 / 06:00 / 12:00 / 18:00 (server time)
+- **PWA** — added to iPhone home screen (manifest.json with `"orientation":"portrait"`)
+- Active subreddits: DigitalAudioPlayer, longboarding, selfhosted
+- DB purge window: 14 days
+
+---
 
 ## System Architecture
 
@@ -20,405 +19,293 @@ Create a trending posts digest/newsflow by:
 COLLECTION PHASE:
   RSS Feed → Post URLs → Reddit JSON API → Smart Dedup → SQLite DB
 
-SUMMARIZATION PHASE:
-  Top 5 Posts (per subreddit) → LLM (Gemma 3 12B) → 5-Sentence Summary → Update DB
+SUMMARISATION PHASE:
+  Top posts (per subreddit) → LLM (Gemma 3 12B via Ollama) → 5-sentence summary → DB
 
 DISPLAY PHASE:
-  Summarized Posts → Rank by Score → Track Engagement (↑↓) → Display Digest
+  Summarised posts → Web dashboard (news-digest.html) → Real-time polling
 ```
 
-## Workflow - Quick Start
-
-**One-command pipeline:**
-```bash
-python3 run.py
+### Server Topology
 ```
-Runs: collect → summarize top 5 → display feed
-
-**Individual commands:**
-```bash
-python3 main.py       # Collect posts from subreddits
-python3 summarize.py  # Summarize top 5 per subreddit
-python3 digest.py     # Display feed (anytime)
+Local Mac (kvirre)
+    │  git push → GitHub → deploy.sh → SSH
+    ▼
+Server (Server@server) — macOS
+    ├── /Users/server/mediastack/Reddit_LLM/   ← cloned repo + DB
+    └── Docker container: reddit-news-server
+            port 8000 → 100.77.129.54:8000
 ```
 
-**What you get:**
-- Fetches latest posts from configured subreddits
-- Summarizes top 5 highest-scoring posts per subreddit
-- Displays feed with:
-  - Engagement tracking (↑ up, ↓ down, → new, ✓ summarized)
-  - Full post title
-  - Score and comment count
-  - Full LLM-generated 5-sentence summary
+---
 
-## Configuration
-
-**File:** `config.py`
-```python
-SUBREDDITS = ["python", "programming", "learnprogramming"]  # Universal - can be any subreddits
-REDDIT_RSS_URL = "https://www.reddit.com/r/{subreddit}/new.rss"
-REQUEST_TIMEOUT = 10
-USER_AGENT = "RedditLLM/1.0"
-
-OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL = "gemma3:12b"  # 8K token context window
-LLM_TIMEOUT = 120
-LLM_TEMPERATURE = 0.2
-```
-
-## Database Schema
-
-**File:** `reddit_posts.db` (SQLite)
-
-```sql
-CREATE TABLE posts (
-    id INTEGER PRIMARY KEY,
-    post_id TEXT UNIQUE NOT NULL,        -- Reddit post ID (from URL)
-    subreddit TEXT NOT NULL,             -- Which subreddit (python, programming, etc)
-    title TEXT NOT NULL,                 -- Post title
-    author TEXT,                         -- Post author
-    score INTEGER,                       -- Current upvote score
-    upvote_ratio REAL,                   -- Upvote ratio (0-1)
-    num_comments INTEGER,                -- Total comments
-    url TEXT NOT NULL,                   -- Full Reddit URL
-    created_utc REAL,                    -- Original post timestamp
-    status TEXT DEFAULT 'new',           -- "new" | "refreshed" | "summarized"
-    summary TEXT,                        -- LLM-generated 5-sentence summary (NULL until processed)
-    fetched_at TIMESTAMP,                -- When first fetched
-    updated_at TIMESTAMP,                -- When last updated
-    json_data TEXT NOT NULL              -- Full Reddit JSON API payload (post + comments)
-)
-```
-
-## Status Field Semantics
-- **"new"**: Newly inserted post (first fetch)
-- **"refreshed"**: Post content changed (score/comments updated) on subsequent fetch
-- **"summarized"**: LLM has processed this post and added summary
-
-## Core Functions
-
-### db.py - Database Layer
-
-```python
-init_db()                           # Create tables + migrate new columns
-post_exists(post_id)               # Returns (score, num_comments) if exists, else None
-content_changed(post_id, score, comments)  # Check if metrics changed
-store_or_update_post(post_data, json_payload)  # Smart insert/update logic
-  Returns: "new" | "refreshed" | "unchanged" | None
-
-get_post_count(subreddit=None)     # Total posts in DB
-```
-
-**Schema Updates:**
-- Added `previous_score INTEGER` - stores score from last fetch
-- Added `previous_num_comments INTEGER` - stores comment count from last fetch
-- Enables tracking engagement direction (up/down)
-
-**Smart Deduplication Logic:**
-1. If post_id doesn't exist → INSERT with status="new"
-2. If post_id exists AND (score changed OR comments changed) → UPDATE with status="refreshed", save previous values
-3. If post_id exists AND nothing changed → SKIP (no update)
-
-### main.py - Post Collector
-
-**Flow for each subreddit:**
-1. Fetch RSS feed (25 posts limit)
-2. For each post:
-   - Extract post ID from URL
-   - Fetch Reddit JSON API (.json endpoint)
-   - Extract post metadata (title, author, score, comments)
-   - Call db.store_or_update_post()
-   - Print progress with status (✓ New, ↻ Refreshed, ⊘ Unchanged)
-3. Print summary: X new, Y refreshed, Z unchanged, E errors
-
-### summarize.py - Batch Summarization
-
-**Only processes top 5 posts per subreddit (by score):**
-1. Get distinct subreddits from DB
-2. For each subreddit:
-   - Query top 5 unsummarized posts by score
-   - For each post: call `llm_processor.process_post(post_id)`
-   - Update DB: set summary + status="summarized"
-   - Print progress
-3. Print totals: X processed, Y skipped, Z errors
-
-**Why top 5 only?**
-- Your "feed" is the top posts per subreddit
-- No point summarizing low-engagement posts
-- Efficient LLM usage (2-3 min vs 30+ min for all posts)
-
-### digest.py - Display Feed
-
-**Shows top 5 posts per subreddit with:**
-- Engagement indicator (→ new, ↑ up, ↓ down, ✓ summarized)
-- Full post title
-- Score and comment count
-- Full LLM-generated summary
-- Legend at bottom
-
-**Data comparison for arrows:**
-- `→` New post (just inserted)
-- `↑` Score increased from previous fetch
-- `↓` Score decreased from previous fetch
-- `✓` Summarized status
-
-### run.py - Orchestration
-
-**Runs full pipeline in sequence:**
-```bash
-python3 run.py
-```
-1. main.py (collect posts)
-2. summarize.py (summarize top 5)
-3. digest.py (display feed)
-
-Stops on error to prevent cascading failures.
-
-## Data Flow - Single Post
-
-```
-RSS Entry
-  ├─ title: "What's a low memory way to run a Python http endpoint?"
-  └─ link: "https://www.reddit.com/r/Python/comments/1slbp28/whats_a_low_memory_way_to_run_a_python_http/"
-
-Extract post_id: "1slbp28"
-
-Fetch: https://www.reddit.com/r/Python/comments/1slbp28/.json
-
-Reddit API Returns: [post_data_object, comments_data_object]
-  post_data_object['data']['children'][0]['data']:
-    - title, author, score, upvote_ratio, num_comments, selftext, etc. (106 fields total)
-    - Full JSON: ~120KB per post (includes all comments tree)
-
-Store in DB:
-  post_id: 1slbp28
-  subreddit: python
-  title: "What's a low memory way..."
-  author: alexp702
-  score: 36
-  num_comments: 52
-  status: "new" (first time) or "refreshed" (updated)
-  json_data: [full API response with all comments]
-  summary: NULL (waiting for LLM)
-```
-
-## Current Status (as of latest session)
-
-**Database Contents:**
-- Total posts: 50
-- r/DigitalAudioPlayer: 25 posts
-- r/longboarding: 25 posts
-
-**Summarization Progress:**
-- Posts summarized: 2 (tested)
-  - `1sktdf8`: 95.4 KB payload ✅ Success
-  - `1sktnxj`: 428.8 KB payload ✅ Success (largest post)
-- Ready to summarize: 48 posts
-
-**Payload Size Analysis:**
-- Under 50 KB: 44 posts (88%) ✓ SAFE
-- 50-100 KB: 3 posts (6%) ✓ TESTED & WORKS
-- Over 150 KB: 3 posts (6%) ✓ WORKS (even the massive ones)
-- **Result: 100% of posts can be processed without filtering**
-
-## LLM Integration: COMPLETE
-
-### llm_processor.py
-**Functions:**
-- `extract_post_context(api_data)` - Return raw Reddit JSON (no filtering needed)
-- `call_ollama(question, api_data)` - Send JSON + question to Mistral
-- `process_post(post_id)` - Main function:
-  - Returns `True` if successfully summarized
-  - Returns `"already_summarized"` if post status="summarized"
-  - Returns `False` if error occurs
-  - Returns `"not_found"` if post doesn't exist
-
-**Question Asked:**
-```
-"What are the key insights from this post, the poster's intention, 
-and the following discussion? Summarize it in 5 sentences."
-```
-
-**Test Results:**
-- Payload handling: Mistral handles even 428KB payloads gracefully
-- Summary quality: Excellent (captures key points, discussion themes, specific advice)
-- Performance: ~30 seconds per post
-- No filtering needed: Full JSON sent as-is to LLM
-
-### summarize.py
-**New script for batch summarization**
-```bash
-python3 summarize.py
-```
-Processes all posts WHERE status != "summarized":
-- Loops through unsummarized posts in order
-- Calls `llm_processor.process_post()` for each
-- Tracks: processed count, skipped count, error count
-- Prints progress with status indicators (✓ ⊘ ✗)
-
-**Output example:**
-```
-Found 48 unsummarized posts
-
-[1/48] Processing: Should I seek better bearings...
-       ✓ Summarized
-
-[2/48] Processing: I 3D printed a brake...
-       ✓ Summarized
-```
-
-### Workflow
-
-**Collect posts:**
-```bash
-python3 main.py
-```
-Output: X new, Y refreshed, Z unchanged posts stored
-
-**Then summarize:**
-```bash
-python3 summarize.py
-```
-Output: N processed, M already_summarized, E errors
-
-## Important Notes
-
-### Reddit API
-- No authentication required for public endpoints
-- JSON endpoint: Just add `.json` to any Reddit URL
-- Returns: [post_wrapper, comments_wrapper] structure
-- Each post is `kind: 't1'` for comments, `kind: 't3'` for posts
-- Rate limits: ~60 requests per minute (hit at 429 errors)
-
-### Deduplication Strategy
-- Not about "skipping duplicates" but "keeping posts fresh"
-- Tracks engagement changes (upvotes, comments)
-- Detects when posts go viral or gain discussion
-- All changes timestamped
-
-### Database Persistence
-- SQLite file: `reddit_posts.db`
-- All Reddit API JSON stored as TEXT (for future analysis)
-- Status field enables workflow tracking: new → refreshed → summarized
-
-## Files & Locations
+## Files
 
 ```
 /Users/kvirre/Documents/Martin/Programmering/Reddit_LLM/
-├── config.py                 # Configuration (subreddits, API keys, timeouts)
-├── db.py                     # Database layer (smart dedup, CRUD + progress tracking)
-├── main.py                   # Post collector (RSS → API → DB)
-├── summarize.py              # Batch summarization (top 5 per subreddit)
-├── news-server2.py           # HTTP server with pipeline orchestration
-├── news-digest.html          # Web dashboard (real-time progress + articles)
-├── reddit_posts.db           # SQLite database (posts + progress table)
-├── requirements.txt          # Python dependencies
-└── documents/CLAUDE.MD       # This file (now in documents/)
+├── config.py            Configuration (fallback subreddits, Ollama URL, timeouts)
+├── db.py                All DB operations (CRUD, settings, purge logic)
+├── main.py              Post collector (RSS → Reddit API → DB)
+├── summarize.py         Batch LLM summarisation (top posts per subreddit)
+├── llm_processor.py     Low-level Ollama API calls
+├── digest.py            CLI feed display (not used in server mode)
+├── run.py               CLI orchestration (not used in server mode)
+├── news-server2.py      HTTP server — pipeline orchestration + API + static serving
+├── news-digest.html     Full frontend — CSS/JS/HTML inline, single file
+├── manifest.json        PWA manifest (orientation: portrait, standalone display)
+├── reddit_posts.db      SQLite DB (local dev copy — server has its own)
+├── docker-compose.yml   Container definition
+├── Dockerfile           Python 3.11 slim image
+├── deploy.sh            Deployment script (always use this)
+├── logs.sh              Read server container logs from local machine
+└── documents/           Documentation (this folder)
 ```
 
-## How to Run
+---
+
+## Database
+
+### Schema
+
+**posts** table:
+```sql
+CREATE TABLE posts (
+    id INTEGER PRIMARY KEY,
+    post_id TEXT UNIQUE NOT NULL,
+    subreddit TEXT NOT NULL,
+    title TEXT NOT NULL,
+    author TEXT,
+    score INTEGER,
+    upvote_ratio REAL,
+    num_comments INTEGER,
+    url TEXT NOT NULL,
+    created_utc REAL,
+    status TEXT DEFAULT 'new',   -- "new" | "refreshed" | "summarized"
+    summary TEXT,
+    fetched_at TIMESTAMP,
+    updated_at TIMESTAMP,
+    json_data TEXT NOT NULL      -- full Reddit JSON (post + comments)
+)
+```
+
+**user_settings** table:
+```sql
+CREATE TABLE user_settings (
+    setting_key TEXT PRIMARY KEY,
+    setting_value TEXT NOT NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)
+-- Keys: "subreddits" (JSON array), "llm_question" (string), "purge_days" (int: 7/14/21/28)
+```
+
+### Accessing the DB from this workspace
+
+The server's DB is **volume-mounted** at:
+```
+/Users/server/mediastack/Reddit_LLM/reddit_posts.db   (on server)
+```
+
+To copy it locally and inspect:
+```bash
+# Pull DB from server
+scp Server@server:/Users/server/mediastack/Reddit_LLM/reddit_posts.db \
+    /Users/kvirre/Documents/Martin/Programmering/Reddit_LLM/reddit_posts.db
+
+# Query it locally
+sqlite3 /Users/kvirre/Documents/Martin/Programmering/Reddit_LLM/reddit_posts.db \
+    "SELECT subreddit, COUNT(*) FROM posts GROUP BY subreddit;"
+
+# Open interactive shell
+sqlite3 /Users/kvirre/Documents/Martin/Programmering/Reddit_LLM/reddit_posts.db
+```
+
+Common queries:
+```sql
+-- Post counts per subreddit
+SELECT subreddit, COUNT(*) FROM posts GROUP BY subreddit;
+
+-- How old are the oldest posts?
+SELECT subreddit, MIN(datetime(created_utc,'unixepoch')) AS oldest FROM posts GROUP BY subreddit;
+
+-- Check settings
+SELECT * FROM user_settings;
+
+-- Summarised vs unsummarised
+SELECT subreddit, status, COUNT(*) FROM posts GROUP BY subreddit, status;
+
+-- Top scored posts
+SELECT subreddit, title, score FROM posts ORDER BY score DESC LIMIT 20;
+```
+
+### Key db.py functions
+```python
+init_db()                          # Create/migrate tables
+store_or_update_post(data, json)   # Smart insert/update: "new"|"refreshed"|"unchanged"
+get_top_posts(subreddit, n=5)      # Top N unsummarised posts by score
+purge_old_posts(subreddit, days)   # Delete posts older than N days
+purge_inactive_subreddits()        # Delete posts for subreddits no longer in settings
+get_subreddits()                   # Active subreddits from DB (fallback: config.py)
+set_subreddits(list)               # Save subreddit list to DB
+get_llm_question()                 # Custom LLM question (fallback: hardcoded default)
+set_llm_question(q)                # Save custom LLM question to DB
+get_purge_days()                   # Returns int (default 14)
+set_purge_days(days)               # Valid values: 7, 14, 21, 28
+```
+
+---
+
+## Server / API
+
+**news-server2.py** — ThreadingHTTPServer on port 8000.
+
+### Endpoints
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/` | Serves `news-digest.html` |
+| GET | `/api/status` | Pipeline status + article data |
+| POST | `/api/pipeline/start` | Trigger pipeline immediately |
+| POST | `/api/settings/subreddits` | Update subreddit list |
+| POST | `/api/settings/question` | Update LLM question |
+| POST | `/api/settings/purge_days` | Update purge window (7/14/21/28) |
+
+### `/api/status` response shape
+```json
+{
+  "running": false,
+  "subreddits": ["DigitalAudioPlayer", "longboarding", "selfhosted"],
+  "llm_question": "...",
+  "purge_days": 14,
+  "status": {
+    "DigitalAudioPlayer": {
+      "phase": "idle",
+      "collect_done": 25, "collect_total": 25,
+      "summarize_done": 5, "summarize_total": 5,
+      "articles": [...],
+      "last_updated": "18:00"
+    }
+  }
+}
+```
+
+`phase` values: `"idle"` | `"collecting"` | `"summarizing"` | `"backoff"` | `"done"`
+
+**Stale-state guard**: if `pipeline_running == False` and phase is `"collecting"` or `"summarizing"`, the API forces it to `"idle"` before returning.
+
+### Scheduled pipeline
+Runs automatically at 00:00, 06:00, 12:00, 18:00 server time. Also triggerable via the Start Pipeline button in the UI (POST `/api/pipeline/start`).
+
+---
+
+## Frontend (news-digest.html)
+
+Single self-contained HTML file — all CSS and JS inline.
+
+### Key features
+- **Tabs** — one per subreddit. Progress bar + badge + label + timestamp per tab.
+- **Tab drag-to-reorder** — long-press (300ms) then horizontal drag. Other tabs shift to show the target slot. Order saved to server via `/api/settings/subreddits`.
+  - Touch events handle mobile (non-passive `touchmove` to block scroll during drag).
+  - Pointer events handle desktop.
+  - Edge auto-scroll: dragging into the 60px zone at either end of the tab bar scrolls it automatically.
+- **Settings modal** — ⚙️ button in header. Tabs: Subreddits, LLM Question, Purge Days.
+- **Article panes** — swipe horizontally (or tab click) to switch subreddit. Full articles rendered with LLM summaries.
+- **Polling** — fetches `/api/status` every 3 s while pipeline is running, less frequently when idle.
+
+### Tab state management
+```js
+const CATS = [];          // Ordered subreddit list (matches tab DOM order)
+let currentCat = null;    // Currently visible subreddit
+```
+`show(cat, btn)` switches the active tab and scrolls the panes track.
+`saveTabOrder(newOrder)` persists the new order to the server.
+
+---
+
+## Reading Logs
 
 ```bash
+# From local machine — tail last 300 lines of container logs
+sh logs.sh
+
+# Or with more lines
+ssh Server@server "/usr/local/bin/docker logs reddit-news-server 2>&1 | tail -500"
+
+# Follow live
+ssh Server@server "/usr/local/bin/docker logs -f reddit-news-server 2>&1"
+```
+
+---
+
+## Deployment
+
+**Always deploy via:**
+```bash
 cd /Users/kvirre/Documents/Martin/Programmering/Reddit_LLM
-
-# Start web dashboard server
-python3 news-server2.py
-
-# Then in browser:
-# - Open http://localhost:8000
-# - Click "Start Pipeline" button
-# - Watch real-time progress bars
-# - Articles appear as summarization completes
+sh deploy.sh
 ```
 
-### What You Get:
-- **Real-time progress bars** for collection (0/25 → 25/25) and summarization (1/5 → 5/5)
-- **Dynamic tabs** for each subreddit with engagement indicators (↑↓→)
-- **Last updated timestamps** showing when subreddits completed (24-hour format)
-- **Smart fetching** - articles load on demand, not constant polling
-- **Smooth animations** - progress updates every 600ms
+The script:
+1. Checks local tree is clean and pushes to GitHub
+2. SSHs to Server@server, pulls repo to `/Users/server/mediastack/Reddit_LLM/`
+3. Stops + removes the `reddit-news-server` container and old image
+4. `docker compose build` (fresh) + `docker compose up -d`
+5. Verifies the container is running and prints recent logs
 
-## Output Examples
+**Never bypass deploy.sh** (no direct SSH docker commands, no `--no-verify`).
 
-**digest.py output:**
-```
-=== r/longboarding TOP 5 ===
+### Typical workflow
+```bash
+# 1. Edit files locally
+# 2. Test locally if needed:
+python3 news-server2.py   # then open http://localhost:8000
 
-1. ✓ I 3D printed a brake for my board
-   Score: 342 | Comments: 87
-   Summary: The Reddit post features a user sharing their creation of a 3D-printed 
-   brake for longboards, intended to improve safety and control while riding...
+# 3. Commit
+git add <files> && git commit -m "..."
 
-2. ↑ Should I seek better bearings or smaller wheels
-   Score: 215 | Comments: 43
-   Summary: The original post on Reddit's longboarding subreddit is seeking advice 
-   on whether to get better bearings or smaller wheels...
-
-3. → Found this board for 40€
-   Score: 156 | Comments: 12
-   Summary: (no summary)
+# 4. Deploy
+sh deploy.sh
 ```
 
-**Legend:**
-- `→` = New post
-- `↑` = Engagement increased
-- `↓` = Engagement decreased  
-- `✓` = Summarized
+---
 
-## Current Status
+## LLM Configuration
 
-**Database:** 50 posts (DigitalAudioPlayer + longboarding)
-**Summarized:** 2 posts tested, system ready for full batch
-**Payload handling:** 100% success (tested up to 428KB)
-**Performance:** ~30 seconds per post through LLM
+- **Model**: Gemma 3 12B (`gemma3:12b`) via Ollama on the server host
+- **Ollama URL**: `http://host.docker.internal:11434/api/generate` (Docker → host bridge)
+- **Default question**: configurable via Settings modal; stored in `user_settings` DB table
+- **Timeout**: 120 s per post
+- **Temperature**: 0.2
 
-## Next Steps
+---
 
-- Phase 5: Export formats (JSON, Markdown, HTML)
-- Phase 6: Web interface for viewing feed
-- Phase 7: Scheduling (cron job for automatic collection + summarization)
+## Docker
 
-## Dependencies
-
-```
-requests==2.31.0         # HTTP requests
-feedparser==6.0.10       # RSS parsing
-beautifulsoup4==4.12.2   # HTML parsing (if needed)
-playwright==1.58.0       # Browser automation (installed but not currently used)
+```yaml
+# docker-compose.yml key settings
+container_name: reddit-news-server
+ports:       "8000:8000"
+volumes:
+  - /Users/server/mediastack/Reddit_LLM/reddit_posts.db:/app/reddit_posts.db
+  - /Users/server/mediastack/Reddit_LLM/data:/app/data
+  - /Users/server/mediastack/Reddit_LLM/logs:/app/logs
+restart: unless-stopped
 ```
 
-## User Requirements (Confirmed)
-1. ✅ Simple sequential system (no threading, no async)
-2. ✅ Universal subreddit support
-3. ✅ Smart deduplication with content tracking
-4. ✅ Status flags for workflow
-5. ✅ LLM processing with specific question
-6. ✅ Newsworthy 5-sentence summaries
-7. ✅ Digest/newsflow generation with engagement tracking
-8. ✅ Top 5 posts per subreddit (efficient LLM usage)
+DB is volume-mounted — **survives container rebuilds**.
 
-## Technical Decisions
+---
 
-### Why Reddit JSON API instead of scraping?
-- Clean structured data (no HTML parsing needed)
-- Full comments tree included
-- Reliable (no anti-bot measures)
-- Fast and simple (just add .json to URL)
+## Access
 
-### Why SQLite?
-- Persistent local storage
-- No external dependencies
-- Easy to query and modify
-- Good for 1000s of posts
+| Method | URL |
+|--------|-----|
+| Tailscale | http://100.77.129.54:8000 |
+| Local (dev) | http://localhost:8000 |
 
-### Why store full JSON?
-- Comments data for LLM context
-- Track all engagement metrics
-- Reproducible analysis
-- Future flexibility
+---
 
-### Why Mistral 7B?
-- 8K context window (enough for post + comments)
-- Good instruction following
-- Fast inference
-- Runs locally via Ollama (no API limits)
+## Known Limitations / Decisions
+
+- **Orientation lock (PWA on iPhone)**: `manifest.json` has `"orientation":"portrait"` but Safari ignores it. This is an Apple limitation — no code fix possible.
+- **Backup folder**: removed (no longer tracked).
+- **MIGRATION_PLAN_SWIPE_NAV.md**: historical planning note for swipe navigation (now implemented as pane swipe). Can be deleted if desired.
+- `IMPLEMENTATION_SUMMARY.md` and `SETTINGS_IMPLEMENTATION.md` are stale implementation histories from April 2026 — kept for reference but not maintained.
