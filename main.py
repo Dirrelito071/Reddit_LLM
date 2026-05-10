@@ -143,6 +143,12 @@ for subreddit in subreddits_to_process:
                     old_fingerprint = db.extract_post_fingerprint(json.loads(old_json))
                     new_fingerprint = db.extract_post_fingerprint(api_data)
                     if old_fingerprint == new_fingerprint:
+                        # Content unchanged — update score/ranking metrics but don't re-summarize
+                        db.update_post_metrics(post_id, api_data, {
+                            'score': store_data['score'],
+                            'num_comments': store_data['num_comments'],
+                            'upvote_ratio': store_data['upvote_ratio']
+                        })
                         if current_status != 'summarized':
                             db.update_post_status(post_id, "stale")
                         print(f"  [{i}/25] ⊘ Stale: {title}")
@@ -209,6 +215,11 @@ for subreddit in subreddits_to_process:
                 old_fingerprint = db.extract_post_fingerprint(json.loads(old_json))
                 new_fingerprint = db.extract_post_fingerprint(api_data)
                 if old_fingerprint == new_fingerprint:
+                    db.update_post_metrics(post_id, api_data, {
+                        'score': store_data['score'],
+                        'num_comments': store_data['num_comments'],
+                        'upvote_ratio': store_data['upvote_ratio']
+                    })
                     db.update_post_status(post_id, "stale")
                     print(f"  [U{idx}] ⊘ Stale: {store_data['title']}")
                 else:

@@ -198,12 +198,12 @@ def post_exists(post_id):
 
 
 def extract_post_fingerprint(api_data):
-    """Extract only meaningful fields from Reddit API JSON for change detection.
-    Ignores volatile fields like signed thumbnail URLs, modhash, subscriber counts."""
+    """Extract only content-relevant fields for re-summarization decisions.
+    Score is excluded — it fluctuates but doesn't change summarizable content.
+    Score is kept current separately via update_post_metrics."""
     try:
         post = api_data[0]['data']['children'][0]['data']
         return {
-            'score': post.get('score'),
             'num_comments': post.get('num_comments'),
             'selftext': post.get('selftext'),
             'title': post.get('title'),
@@ -212,6 +212,22 @@ def extract_post_fingerprint(api_data):
         }
     except (IndexError, KeyError, TypeError):
         return None
+
+
+def update_post_metrics(post_id, api_data, metrics):
+    """Update score, num_comments, upvote_ratio and json_data without changing status.
+    Used when content is unchanged but ranking metrics may have shifted."""
+    import time, datetime
+    now_local = datetime.datetime.fromtimestamp(time.time()).isoformat(sep=' ', timespec='seconds')
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE posts SET score = ?, num_comments = ?, upvote_ratio = ?, json_data = ?, updated_at = ?
+        WHERE post_id = ?
+    """, (metrics.get('score'), metrics.get('num_comments'), metrics.get('upvote_ratio'),
+          json.dumps(api_data), now_local, post_id))
+    conn.commit()
+    conn.close()
 
 
 def content_changed(post_id, new_score, new_num_comments):
