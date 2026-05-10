@@ -184,7 +184,8 @@ html, body {
       border-bottom: 1px solid var(--border-main); overflow-x: auto; }
     .tab  { flex-shrink: 0; min-width: 140px; padding: 10px 12px 8px;
       border-radius: 12px; border: 1.5px solid var(--border-main); outline: 1.5px solid var(--border-main); outline-offset: -2px;
-      background: var(--bg-card); cursor: pointer; text-align: left; color: var(--text-main); }
+      background: var(--bg-card); cursor: pointer; text-align: left; color: var(--text-main);
+      user-select: none; -webkit-user-select: none; touch-action: none; -webkit-tap-highlight-color: transparent; }
     .tab .name  { font-size: 0.85rem; font-weight: 700; margin-bottom: 6px; }
     .tab .info  { display: flex; justify-content: space-between;
       font-size: 0.68rem; margin-bottom: 5px; }
@@ -921,10 +922,12 @@ html, body {
 
       tab.addEventListener('pointerdown', function(e) {
         if (e.button !== 0 && e.pointerType !== 'touch') return;
+        e.preventDefault(); // prevent text selection on long-press
         reorderPointerStart = { x: e.clientX, y: e.clientY, pointerId: e.pointerId };
         reorderActive = false;
         reorderLongPressTimer = setTimeout(() => {
           // Activate drag mode: lift the tab visually
+          if (window.getSelection) window.getSelection().removeAllRanges(); // clear any selection
           reorderActive = true;
           reorderStartX = reorderPointerStart ? reorderPointerStart.x : e.clientX;
           tab.setPointerCapture(reorderPointerStart.pointerId);
