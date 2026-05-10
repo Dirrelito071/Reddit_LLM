@@ -611,7 +611,7 @@ html, body {
               activePaneEl.style.transition = 'none';
               activePaneEl.style.transform = `translateY(${pullDistance * 0.45}px)`;
               const dimRatio = Math.min(pullDistance / PULL_MAX, 1);
-              activePaneEl.style.opacity = 1 - dimRatio * 0.5;
+              activePaneEl.style.opacity = 1 - dimRatio * 0.9;
             }
           } else {
             pullActive = false;
