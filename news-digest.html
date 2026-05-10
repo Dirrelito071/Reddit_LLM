@@ -564,12 +564,39 @@ html, body {
   const CATS = [];  // Will be populated from API
   const prev = {};
 
+  // --- Cache keys for localStorage ---
+  const CACHE_KEY_NEWS = 'rdl_news_cache';
+  const CACHE_KEY_META = 'rdl_meta_cache';
+  let cachedTimestamps = {}; // { subreddit: last_updated ISO string }
+  let tabsInitialized = false;
+
+  function saveNewsCache(cat, articles) {
+    try {
+      const news = JSON.parse(localStorage.getItem(CACHE_KEY_NEWS) || '{}');
+      news[cat] = articles;
+      localStorage.setItem(CACHE_KEY_NEWS, JSON.stringify(news));
+    } catch(e) {}
+  }
+
+  function saveMetaCache(subreddits) {
+    try {
+      localStorage.setItem(CACHE_KEY_META, JSON.stringify({ subreddits, timestamps: cachedTimestamps }));
+    } catch(e) {}
+  }
+
+  function clearCache() {
+    localStorage.removeItem(CACHE_KEY_NEWS);
+    localStorage.removeItem(CACHE_KEY_META);
+    cachedTimestamps = {};
+  }
+
 
   // Refresh button handler (replaces pipeline-btn)
   const refreshBtn = document.getElementById('refresh-btn');
   refreshBtn.addEventListener('click', async () => {
     try {
       refreshBtn.disabled = true;
+      setPollingRate(2000); // immediately speed up before server confirms
       const response = await fetch('/api/run', { method: 'POST' });
       const data = await response.json();
       if (data.started) {
@@ -641,6 +668,7 @@ html, body {
           </div>`;
         }).join('')
       : '<p style="color:#888;padding:8px 0;font-size:.85rem">Waiting for first fetch…</p>';
+    if (articles && articles.length) saveNewsCache(cat, articles);
   }
 
   function initializeTabs(subreddits) {
@@ -762,6 +790,7 @@ html, body {
             });
             const data = await resp.json();
             if (data.started) {
+              setPollingRate(2000); // immediately speed up
               setTimeout(() => { tab.classList.remove('tab-refresh-ready'); }, 1200);
             } else if (data.error) {
               alert('Error: ' + data.error);
@@ -797,6 +826,7 @@ html, body {
     // Set initial transform
     panesTrack.style.transform = 'translateX(0)';
     panesTrack.style.transition = '';
+    tabsInitialized = true;
   }
   // Add style for tab-refreshing
   const style = document.createElement('style');
@@ -851,7 +881,9 @@ html, body {
         } else {
           document.getElementById('ts-' + cat).textContent = '';
         }
-        if (s.phase === 'ready' && prev[cat] !== 'ready') {
+        if (s.phase === 'ready' && s.last_updated && s.last_updated > (cachedTimestamps[cat] || '')) {
+          cachedTimestamps[cat] = s.last_updated;
+          saveMetaCache(Object.keys(data.status || {}));
           fetch('/api/news').then(r => r.json()).then(d => renderNews(cat, d[cat]));
         }
       }
@@ -877,34 +909,85 @@ html, body {
     }
   }
 
-  // Initialize tabs from first status fetch
-  fetch('/api/status')
-    .then(r => r.json())
-    .then(data => {
-      // Get subreddit names from status object keys (most reliable)
-      const subreddits = Object.keys(data.status || {});
-      initializeTabs(subreddits);
-      applyStatus(data);
-      updateRunTimes(data);
-    })
-    .catch((err) => {
-      const e = document.getElementById('err');
-      e.style.display = 'block';
-      e.textContent = '⚠ python3 news-server2.py is not running';
-    });
+  // --- Adaptive poller ---
+  let pollInterval = null;
+  let currentRate = null;
+  let lastRunningState = false;
 
-  // Poll for status updates
-  setInterval(() =>
+  function setPollingRate(ms) {
+    if (currentRate === ms) return;
+    clearInterval(pollInterval);
+    currentRate = ms;
+    pollInterval = setInterval(doPoll, ms);
+  }
+
+  function doPoll() {
     fetch('/api/status')
-      .then(r => r.json()).then(data => {
-        applyStatus(data); updateRunTimes(data);
+      .then(r => r.json())
+      .then(data => {
+        applyStatus(data);
+        updateRunTimes(data);
+        lastRunningState = data.running;
+        setPollingRate(data.running ? 2000 : 60000);
       })
-      .catch((err) => {
+      .catch(() => {
         const e = document.getElementById('err');
         e.style.display = 'block';
         e.textContent = '⚠ python3 news-server2.py is not running';
+      });
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      clearInterval(pollInterval);
+      currentRate = null;
+    } else {
+      doPoll(); // immediate check on return
+      setPollingRate(lastRunningState ? 2000 : 60000);
+    }
+  });
+
+  // --- Load from cache for instant render, then fetch status in background ---
+  (function loadFromCacheAndInit() {
+    let cachedNews = null;
+    let cachedMeta = null;
+    try {
+      const rawNews = localStorage.getItem(CACHE_KEY_NEWS);
+      const rawMeta = localStorage.getItem(CACHE_KEY_META);
+      if (rawNews && rawMeta) {
+        cachedNews = JSON.parse(rawNews);
+        cachedMeta = JSON.parse(rawMeta);
+        cachedTimestamps = cachedMeta.timestamps || {};
+      }
+    } catch(e) {}
+
+    if (cachedMeta && cachedMeta.subreddits && cachedNews) {
+      // Instant render from cache — no skeletons
+      initializeTabs(cachedMeta.subreddits);
+      cachedMeta.subreddits.forEach(cat => {
+        if (cachedNews[cat]) renderNews(cat, cachedNews[cat]);
+      });
+    }
+
+    // Fetch status in background (initializes tabs if no cache, and checks for updates)
+    fetch('/api/status')
+      .then(r => r.json())
+      .then(data => {
+        const subreddits = Object.keys(data.status || {});
+        if (!tabsInitialized) initializeTabs(subreddits);
+        saveMetaCache(subreddits);
+        applyStatus(data);
+        updateRunTimes(data);
+        lastRunningState = data.running;
+        setPollingRate(data.running ? 2000 : 60000);
       })
-  , 600);
+      .catch(() => {
+        const e = document.getElementById('err');
+        e.style.display = 'block';
+        e.textContent = '⚠ python3 news-server2.py is not running';
+        if (!tabsInitialized) setPollingRate(60000); // still start slow poll to retry
+      });
+  })();
 
   // ========== Settings Modal Event Handlers ==========
 
@@ -1149,9 +1232,11 @@ html, body {
       }
 
       // Success
+      clearCache(); // subreddits/question changed — force fresh fetch on next load
       showSettingsSuccess('Settings saved successfully!');
       setTimeout(() => {
         closeSettings();
+        tabsInitialized = false; // allow re-init with new subreddit list
         // Reload tabs with new subreddits immediately
         fetch('/api/status')
           .then(r => r.json())
