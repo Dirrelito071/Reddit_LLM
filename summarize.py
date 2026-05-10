@@ -74,34 +74,41 @@ for (subreddit,) in subreddits:
     
     print(f"  Top {len(posts_to_process)} posts: {needs_summary} need summarization, {already_done} already done\n")
     
-    # Update progress: summarizing phase starting (start at 20% = 1/5 about to be processed)
-    db.update_progress(subreddit, "summarizing", 20, len(posts_to_process))
+    # Progress total = only posts that need work, so UI shows e.g. 1/2 not 4/5
+    db.update_progress(subreddit, "summarizing", 0, needs_summary, current=0, total=needs_summary)
     
     processed = 0
     skipped = 0
     errors = 0
+    work_i = 0  # only increments for posts actually sent to LLM
     
-    for i, (post_id, title, status) in enumerate(posts_to_process, 1):
+    for (post_id, title, status) in posts_to_process:
         short_title = title[:50] + "..." if len(title) > 50 else title
         
-        # Update progress before processing (shows current post being worked on)
-        pct = int((i / len(posts_to_process)) * 100)
-        db.update_progress(subreddit, "summarizing", pct, len(posts_to_process), current=i, total=len(posts_to_process))
+        # Pre-filter: skip without touching work counter or progress
+        if status == 'summarized':
+            print(f"  [skip] ⊘ Already summarized: {short_title}")
+            skipped += 1
+            continue
+        
+        work_i += 1
+        pct = int((work_i / needs_summary) * 100)
+        db.update_progress(subreddit, "summarizing", pct, needs_summary, current=work_i, total=needs_summary)
         
         post_start = time.time()
-        print(f"  [{i}/{len(posts_to_process)}] Processing: {short_title}")
+        print(f"  [{work_i}/{needs_summary}] Processing: {short_title}")
         
         result = llm_processor.process_post(post_id, custom_question=custom_question)
         elapsed = time.time() - post_start
         
-        # Update progress after each post completes
-        pct = int((i / len(posts_to_process)) * 100)
-        db.update_progress(subreddit, "summarizing", pct, len(posts_to_process), current=i, total=len(posts_to_process))
+        pct = int((work_i / needs_summary) * 100)
+        db.update_progress(subreddit, "summarizing", pct, needs_summary, current=work_i, total=needs_summary)
         
         if result is True:
             print(f"       ✓ Summarized ({elapsed:.1f}s)\n")
             processed += 1
         elif result == "already_summarized":
+            # Shouldn't happen after pre-filter, but handle gracefully
             print(f"       ⊘ Already summarized\n")
             skipped += 1
         else:
@@ -109,7 +116,7 @@ for (subreddit,) in subreddits:
             errors += 1
     
     # Mark as ready when done
-    db.update_progress(subreddit, "ready", 100, len(posts_to_process), current=len(posts_to_process), total=len(posts_to_process))
+    db.update_progress(subreddit, "ready", 100, needs_summary, current=needs_summary, total=needs_summary)
     print(f"  Summary: {processed} processed, {skipped} skipped, {errors} errors\n")
     
     total_processed += processed
