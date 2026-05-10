@@ -30,11 +30,11 @@ def purge_old_posts(subreddit, days=7):
     conn.commit()
     conn.close()
 def mark_all_unprocessed(subreddit):
-    """Set status='unprocessed' for all posts in a subreddit."""
+    """Set status='unprocessed' for all posts in a subreddit, except already summarized ones."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("""
-        UPDATE posts SET status = 'unprocessed' WHERE subreddit = ?
+        UPDATE posts SET status = 'unprocessed' WHERE subreddit = ? AND status != 'summarized'
     """, (subreddit,))
     conn.commit()
     conn.close()

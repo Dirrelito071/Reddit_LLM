@@ -125,7 +125,7 @@ for subreddit in subreddits_to_process:
                 # Check if post exists
                 conn = db.sqlite3.connect(db.DB_PATH)
                 cursor = conn.cursor()
-                cursor.execute("SELECT json_data FROM posts WHERE post_id = ?", (post_id,))
+                cursor.execute("SELECT json_data, status FROM posts WHERE post_id = ?", (post_id,))
                 row = cursor.fetchone()
                 conn.close()
                 if row is None:
@@ -139,9 +139,10 @@ for subreddit in subreddits_to_process:
                     print(f"  [{i}/25] ✓ New: {title} ({store_data['score']} pts)")
                     new_count += 1
                 else:
-                    old_json = row[0]
+                    old_json, current_status = row[0], row[1]
                     if json.dumps(api_data, sort_keys=True) == old_json:
-                        db.update_post_status(post_id, "stale")
+                        if current_status != 'summarized':
+                            db.update_post_status(post_id, "stale")
                         print(f"  [{i}/25] ⊘ Stale: {title}")
                         stale_count += 1
                     else:
