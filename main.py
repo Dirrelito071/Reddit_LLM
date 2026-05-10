@@ -50,9 +50,8 @@ for subreddit in subreddits_to_process:
 
     # Step 0: Purge old posts (older than 7 days)
     db.purge_old_posts(subreddit)
-    # Step 1: Mark all as unprocessed
-    db.mark_all_unprocessed(subreddit)
     db.update_progress(subreddit, "collecting", 0, 0, subphase="rss", current=0, total=25)
+    rss_post_ids = set()
 
     # Step 2: Process latest 25 from RSS, with staged backoff on 429
     url = config.REDDIT_RSS_URL.format(subreddit=subreddit)
@@ -103,6 +102,7 @@ for subreddit in subreddits_to_process:
             print(f"  [{i}/25] ✗ Could not extract post ID")
             error_count += 1
             continue
+        rss_post_ids.add(post_id)
 
         api_url = post_url.rstrip('/') + '.json'
         try:
@@ -168,33 +168,17 @@ for subreddit in subreddits_to_process:
             print(f"  [{i}/25] ✗ Error: {str(e)[:50]}")
             error_count += 1
 
-    # Step 3: Process unprocessed posts
-    unprocessed = db.get_unprocessed_posts(subreddit)
-    total_unprocessed = len(unprocessed)
-    for idx, (post_id, old_json) in enumerate(unprocessed, 1):
-        db.update_progress(
-            subreddit,
-            "collecting",
-            int(idx/total_unprocessed*100) if total_unprocessed else 100,
-            0,
-            subphase="unprocessed",
-            current=idx,
-            total=total_unprocessed
-        )
-        # Fetch latest JSON
-        # Try to reconstruct the post URL from DB if needed (not shown here)
-        # We'll assume we can get the permalink from the DB if needed
-        # For now, skip if we can't reconstruct
+    # Step 3: Re-fetch all posts in DB not seen in RSS, fingerprint and update
+    conn = db.sqlite3.connect(db.DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT post_id, url, json_data, status FROM posts WHERE subreddit = ?", (subreddit,))
+    remaining_posts = [(r[0], r[1], r[2], r[3]) for r in cursor.fetchall() if r[0] not in rss_post_ids]
+    conn.close()
+
+    total_remaining = len(remaining_posts)
+    for idx, (post_id, post_url, old_json, current_status) in enumerate(remaining_posts, 1):
+        db.update_progress(subreddit, "collecting", int(idx/total_remaining*100) if total_remaining else 100, 0, subphase="older", current=idx, total=total_remaining)
         try:
-            # Get permalink from DB
-            conn = db.sqlite3.connect(db.DB_PATH)
-            cursor = conn.cursor()
-            cursor.execute("SELECT url FROM posts WHERE post_id = ?", (post_id,))
-            row = cursor.fetchone()
-            conn.close()
-            if not row:
-                continue
-            post_url = row[0]
             api_url = post_url.rstrip('/') + '.json'
             api_response = requests.get(api_url, headers={"User-Agent": config.USER_AGENT}, timeout=config.REQUEST_TIMEOUT)
             api_response.raise_for_status()
@@ -202,40 +186,30 @@ for subreddit in subreddits_to_process:
             if isinstance(api_data, list) and len(api_data) > 0:
                 post_data = api_data[0]['data']['children'][0]['data']
                 store_data = {
-                    'id': post_id,
-                    'subreddit': subreddit,
-                    'title': post_data.get('title'),
-                    'author': post_data.get('author'),
                     'score': post_data.get('score'),
-                    'upvote_ratio': post_data.get('upvote_ratio'),
                     'num_comments': post_data.get('num_comments'),
-                    'url': post_url,
-                    'created_utc': post_data.get('created_utc'),
+                    'upvote_ratio': post_data.get('upvote_ratio'),
                 }
+                title = post_data.get('title', post_id)[:60]
                 old_fingerprint = db.extract_post_fingerprint(json.loads(old_json))
                 new_fingerprint = db.extract_post_fingerprint(api_data)
                 if old_fingerprint == new_fingerprint:
-                    db.update_post_metrics(post_id, api_data, {
-                        'score': store_data['score'],
-                        'num_comments': store_data['num_comments'],
-                        'upvote_ratio': store_data['upvote_ratio']
-                    })
-                    db.update_post_status(post_id, "stale")
-                    print(f"  [U{idx}] ⊘ Stale: {store_data['title']}")
+                    db.update_post_metrics(post_id, api_data, store_data)
+                    print(f"  [O{idx}] ⊘ Stale: {title}")
+                    stale_count += 1
                 else:
-                    db.update_post_status(post_id, "refreshed", api_data, {
-                        'score': store_data['score'],
-                        'num_comments': store_data['num_comments'],
-                        'upvote_ratio': store_data['upvote_ratio']
-                    })
-                    print(f"  [U{idx}] ↻ Refreshed: {store_data['title']} ({store_data['score']} pts, {store_data['num_comments']} comments)")
+                    db.update_post_status(post_id, "refreshed", api_data, store_data)
+                    print(f"  [O{idx}] ↻ Refreshed: {title} ({store_data['score']} pts, {store_data['num_comments']} comments)")
+                    refreshed_count += 1
             else:
-                print(f"  [U{idx}] ✗ Invalid API response for unprocessed post")
+                print(f"  [O{idx}] ✗ Invalid API response")
+                error_count += 1
         except Exception as e:
-            print(f"  [U{idx}] ✗ Error: {str(e)[:50]}")
+            print(f"  [O{idx}] ✗ Error: {str(e)[:50]}")
+            error_count += 1
 
     # Mark collecting phase as done
-    db.update_progress(subreddit, "collecting", 100, 0, subphase="unprocessed", current=total_unprocessed, total=total_unprocessed)
+    db.update_progress(subreddit, "collecting", 100, 0, subphase="older", current=total_remaining, total=total_remaining)
 
     print(f"\n  Summary: {new_count} new, {refreshed_count} refreshed, {stale_count} stale, {error_count} errors")
     print()
