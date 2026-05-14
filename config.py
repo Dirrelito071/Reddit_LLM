@@ -20,5 +20,5 @@ USER_AGENT = "RedditLLM/1.0"
 # llama-server runs on port 11434 with Qwen3 8B
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://host.docker.internal:11434/completion")
 MODEL = "qwen3-8b"
-LLM_TIMEOUT = 120
+LLM_TIMEOUT = 300
 LLM_TEMPERATURE = 0.2
