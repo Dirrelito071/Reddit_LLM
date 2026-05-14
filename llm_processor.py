@@ -57,9 +57,9 @@ def call_ollama(question, api_data):
     """
     try:
         # Format JSON for LLM with question
-        # Reserve ~2000 tokens for question + response, use the rest of the context window
+        # Hard cap at 32000 chars (~8000 tokens) to avoid VRAM pressure on large posts
         context_json = json.dumps(api_data, indent=2)
-        max_chars = (_get_ctx_size() - 2000) * 4
+        max_chars = min((_get_ctx_size() - 2000) * 4, 32000)
         if len(context_json) > max_chars:
             context_json = context_json[:max_chars] + "\n... [truncated]"
         full_prompt = f"Reddit API JSON data:\n\n{context_json}\n\nQUESTION: {question}"
