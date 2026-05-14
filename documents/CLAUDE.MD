@@ -1,5 +1,5 @@
 # Reddit LLM System — Project Documentation
-<!-- Last updated: 10 May 2026 -->
+<!-- Last updated: 14 May 2026 -->
 
 ## Project Goal
 A scheduled Reddit digest app that collects posts from configured subreddits, summarises them with a local LLM, and serves a mobile-friendly web dashboard with real-time progress tracking.
@@ -54,7 +54,6 @@ Server (Server@server) — macOS
 ├── news-digest.html     Full frontend — CSS/JS/HTML inline, single file
 ├── manifest.json        PWA manifest (orientation: portrait, standalone display)
 ├── reddit_posts.db      SQLite DB (local dev copy — server has its own)
-├── docker-compose.yml   Container definition
 ├── Dockerfile           Python 3.11 slim image
 ├── deploy.sh            Deployment script (always use this)
 ├── logs.sh              Read server container logs from local machine

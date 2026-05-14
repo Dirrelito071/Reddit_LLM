@@ -1,5 +1,5 @@
 # Deployment
-<!-- Last updated: 10 May 2026 -->
+<!-- Last updated: 14 May 2026 -->
 
 ## Always deploy with
 
@@ -45,7 +45,7 @@ Full log saved to `/tmp/reddit-llm-deploy.log` on the local machine.
 /Volumes/RED - Backup OLD stuff/mediastack-data/reddit-llm/logs             →  /app/logs
 ```
 
-> The real compose file controlling these mounts is `/Users/server/mediastack/docker-compose.yaml` on the server. The `docker-compose.yml` in the repo is not used by deploy.sh.
+> The compose file controlling these mounts is `/Users/server/mediastack/docker-compose.yaml` on the server. There is no `docker-compose.yml` in the repo — env var changes (e.g. `OLLAMA_URL`) must be made directly on the server's file.
 
 ---
 
