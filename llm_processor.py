@@ -15,7 +15,7 @@ def _get_ctx_size():
     global _ctx_size_cache
     if _ctx_size_cache is None:
         try:
-            base = config.OLLAMA_URL.replace("/completion", "")
+            base = config.OLLAMA_URL.split("/v1")[0]
             r = requests.get(f"{base}/slots", timeout=5)
             slots = r.json()
             _ctx_size_cache = slots[0].get("n_ctx", 16896) if slots else 16896
@@ -57,17 +57,18 @@ def call_ollama(question, api_data):
     """
     try:
         # Format JSON for LLM with question
-        # Hard cap at 32000 chars (~8000 tokens) to avoid VRAM pressure on large posts
+        # Reserve ~2000 tokens for question + response, use the rest of the context window
         context_json = json.dumps(api_data, indent=2)
-        max_chars = min((_get_ctx_size() - 2000) * 4, 32000)
+        max_chars = (_get_ctx_size() - 2000) * 4
         if len(context_json) > max_chars:
             context_json = context_json[:max_chars] + "\n... [truncated]"
-        full_prompt = f"Reddit API JSON data:\n\n{context_json}\n\nQUESTION: {question}"
+        user_content = f"Reddit API JSON data:\n\n{context_json}\n\nQUESTION: {question}"
         
         response = requests.post(
             config.OLLAMA_URL,
             json={
-                "prompt": full_prompt,
+                "model": config.MODEL,
+                "messages": [{"role": "user", "content": user_content}],
                 "temperature": config.LLM_TEMPERATURE,
                 "stream": False,
                 "chat_template_kwargs": {"enable_thinking": False},
@@ -77,7 +78,7 @@ def call_ollama(question, api_data):
         response.raise_for_status()
         
         result = response.json()
-        return result.get('content', '')
+        return result['choices'][0]['message']['content']
     except Exception as e:
         print(f"Error calling Ollama: {e}")
         return None
