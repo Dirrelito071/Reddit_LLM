@@ -49,17 +49,17 @@ def call_ollama(question, api_data):
         response = requests.post(
             config.OLLAMA_URL,
             json={
-                "model": config.MODEL,
                 "prompt": full_prompt,
                 "temperature": config.LLM_TEMPERATURE,
                 "stream": False,
+                "chat_template_kwargs": {"enable_thinking": False},
             },
             timeout=config.LLM_TIMEOUT
         )
         response.raise_for_status()
         
         result = response.json()
-        return result.get('response', '')
+        return result.get('content', '')
     except Exception as e:
         print(f"Error calling Ollama: {e}")
         return None

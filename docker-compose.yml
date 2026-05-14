@@ -7,8 +7,8 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - OLLAMA_URL=http://host.docker.internal:11434/api/generate
-      - MODEL=mistral:7b-instruct
+      - OLLAMA_URL=http://Server.local:11434/completion
+      - MODEL=qwen3-8b
       - LOG_LEVEL=INFO
     volumes:
       - /Users/server/mediastack/Reddit_LLM/reddit_posts.db:/app/reddit_posts.db
