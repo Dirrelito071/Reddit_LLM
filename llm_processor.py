@@ -38,7 +38,27 @@ def extract_post_context(api_data):
         Raw API data if valid, None otherwise
     """
     try:
-        return api_data if isinstance(api_data, list) and len(api_data) > 0 else None
+        # Expecting [post_data, comments_data]
+        if not (isinstance(api_data, list) and len(api_data) >= 2):
+            return None
+        post = api_data[0]['data']['children'][0]['data']
+        comments = api_data[1]['data']['children']
+        top_comments = [c['data'] for c in comments if c.get('kind') == 't1'][:10]
+        reduced = {
+            'title': post.get('title'),
+            'author': post.get('author'),
+            'selftext': post.get('selftext'),
+            'score': post.get('score'),
+            'num_comments': post.get('num_comments'),
+            'comments': [
+                {
+                    'author': c.get('author'),
+                    'body': c.get('body'),
+                    'score': c.get('score')
+                } for c in top_comments
+            ]
+        }
+        return reduced
     except Exception as e:
         print(f"Error with API data: {e}")
         return None
@@ -57,28 +77,23 @@ def call_ollama(question, api_data):
     """
     try:
         # Format JSON for LLM with question
-        # Reserve ~2000 tokens for question + response, use the rest of the context window
         context_json = json.dumps(api_data, indent=2)
-        max_chars = (_get_ctx_size() - 2000) * 4
-        if len(context_json) > max_chars:
-            context_json = context_json[:max_chars] + "\n... [truncated]"
-        user_content = f"Reddit API JSON data:\n\n{context_json}\n\nQUESTION: {question}"
+        full_prompt = f"Reddit API JSON data:\n\n{context_json}\n\nQUESTION: {question}"
         
         response = requests.post(
             config.OLLAMA_URL,
             json={
                 "model": config.MODEL,
-                "messages": [{"role": "user", "content": user_content}],
+                "prompt": full_prompt,
                 "temperature": config.LLM_TEMPERATURE,
                 "stream": False,
-                "chat_template_kwargs": {"enable_thinking": False},
             },
             timeout=config.LLM_TIMEOUT
         )
         response.raise_for_status()
         
         result = response.json()
-        return result['choices'][0]['message']['content']
+        return result.get('response', '')
     except Exception as e:
         print(f"Error calling Ollama: {e}")
         return None
