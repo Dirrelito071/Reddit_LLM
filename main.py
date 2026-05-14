@@ -15,6 +15,35 @@ import time
 db.init_db()
 db.init_progress()
 
+def fetch_with_backoff(url, subreddit, backoff_stages=(60, 300, 600)):
+    """GET url with staged backoff on 429. Returns Response or None on failure."""
+    attempt = 0
+    while True:
+        try:
+            r = requests.get(url, headers={"User-Agent": config.USER_AGENT}, timeout=config.REQUEST_TIMEOUT)
+            if r.status_code == 429:
+                if attempt < len(backoff_stages):
+                    wait_time = backoff_stages[attempt]
+                    print(f"  ✗ Rate limited (429). Backing off for {wait_time//60} min...")
+                    start = time.time()
+                    end = start + wait_time
+                    while time.time() < end:
+                        remaining = int(end - time.time())
+                        db.update_progress(subreddit, "backoff", 0, 0, subphase="rate_limit", current=wait_time-remaining, total=wait_time)
+                        time.sleep(1)
+                    attempt += 1
+                    continue
+                else:
+                    print("  ✗ Rate limited (429) after max backoff attempts. Giving up.")
+                    return None
+            r.raise_for_status()
+            return r
+        except requests.exceptions.HTTPError:
+            raise
+        except Exception as e:
+            print(f"  ✗ Request error: {e}")
+            return None
+
 # Check for --subreddit parameter
 target_subreddit = None
 if len(sys.argv) > 2 and sys.argv[1] == "--subreddit":
@@ -106,8 +135,10 @@ for subreddit in subreddits_to_process:
 
         api_url = post_url.rstrip('/') + '.json'
         try:
-            api_response = requests.get(api_url, headers={"User-Agent": config.USER_AGENT}, timeout=config.REQUEST_TIMEOUT)
-            api_response.raise_for_status()
+            api_response = fetch_with_backoff(api_url, subreddit)
+            if api_response is None:
+                error_count += 1
+                continue
             api_data = api_response.json()
             if isinstance(api_data, list) and len(api_data) > 0:
                 post_data = api_data[0]['data']['children'][0]['data']
@@ -188,8 +219,10 @@ for subreddit in subreddits_to_process:
         db.update_progress(subreddit, "collecting", int(idx/total_remaining*100) if total_remaining else 100, 0, subphase="older", current=idx, total=total_remaining)
         try:
             api_url = post_url.rstrip('/') + '.json'
-            api_response = requests.get(api_url, headers={"User-Agent": config.USER_AGENT}, timeout=config.REQUEST_TIMEOUT)
-            api_response.raise_for_status()
+            api_response = fetch_with_backoff(api_url, subreddit)
+            if api_response is None:
+                error_count += 1
+                continue
             api_data = api_response.json()
             if isinstance(api_data, list) and len(api_data) > 0:
                 post_data = api_data[0]['data']['children'][0]['data']
