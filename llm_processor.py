@@ -16,8 +16,9 @@ def _get_ctx_size():
     if _ctx_size_cache is None:
         try:
             base = config.OLLAMA_URL.replace("/completion", "")
-            r = requests.get(f"{base}/props", timeout=5)
-            _ctx_size_cache = r.json().get("n_ctx", 16896)
+            r = requests.get(f"{base}/slots", timeout=5)
+            slots = r.json()
+            _ctx_size_cache = slots[0].get("n_ctx", 16896) if slots else 16896
         except Exception:
             _ctx_size_cache = 16896  # fallback
     return _ctx_size_cache
