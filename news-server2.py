@@ -369,6 +369,7 @@ class NewsHandler(BaseHTTPRequestHandler):
             subreddits = [sr.strip() for sr in subreddits]
             if db.set_subreddits(subreddits):
                 logger.info(f"Subreddits updated: {subreddits}")
+                db.purge_inactive_subreddits()
                 self.send_json({"success": True, "subreddits": subreddits})
             else:
                 self.send_json({"error": "Failed to save subreddits"})
