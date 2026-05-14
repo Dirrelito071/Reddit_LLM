@@ -100,24 +100,26 @@ CREATE TABLE user_settings (
 
 ### Accessing the DB from this workspace
 
-The server's DB is **volume-mounted** at:
+The real DB is volume-mounted from the RED external drive at:
 ```
-/Users/server/mediastack/Reddit_LLM/reddit_posts.db   (on server)
+/Volumes/RED - Backup OLD stuff/mediastack-data/reddit-llm/reddit_posts.db   (on server, via SMB)
 ```
 
-To copy it locally and inspect:
+It is also accessible locally via the SMB share mounted at:
+```
+/Volumes/RED - Backup OLD stuff/mediastack-data/reddit-llm/reddit_posts.db   (on local Mac)
+```
+
+Query it directly via the SMB mount (no copy needed):
 ```bash
-# Pull DB from server
-scp Server@server:/Users/server/mediastack/Reddit_LLM/reddit_posts.db \
-    /Users/kvirre/Documents/Martin/Programmering/Reddit_LLM/reddit_posts.db
-
-# Query it locally
-sqlite3 /Users/kvirre/Documents/Martin/Programmering/Reddit_LLM/reddit_posts.db \
+sqlite3 "/Volumes/RED - Backup OLD stuff/mediastack-data/reddit-llm/reddit_posts.db" \
     "SELECT subreddit, COUNT(*) FROM posts GROUP BY subreddit;"
 
 # Open interactive shell
-sqlite3 /Users/kvirre/Documents/Martin/Programmering/Reddit_LLM/reddit_posts.db
+sqlite3 "/Volumes/RED - Backup OLD stuff/mediastack-data/reddit-llm/reddit_posts.db"
 ```
+
+> **Do NOT use scp to copy the DB locally** — the SMB mount gives direct access to the live file.
 
 Common queries:
 ```sql
@@ -280,15 +282,17 @@ sh deploy.sh
 ## Docker
 
 ```yaml
-# docker-compose.yml key settings
+# /Users/server/mediastack/docker-compose.yaml (on server — this is the real file used by deploy.sh)
 container_name: reddit-news-server
 ports:       "8000:8000"
 volumes:
-  - /Users/server/mediastack/Reddit_LLM/reddit_posts.db:/app/reddit_posts.db
-  - /Users/server/mediastack/Reddit_LLM/data:/app/data
-  - /Users/server/mediastack/Reddit_LLM/logs:/app/logs
+  - /Volumes/RED - Backup OLD stuff/mediastack-data/reddit-llm/reddit_posts.db:/app/reddit_posts.db
+  - /Volumes/RED - Backup OLD stuff/mediastack-data/reddit-llm/data:/app/data
+  - /Volumes/RED - Backup OLD stuff/mediastack-data/reddit-llm/logs:/app/logs
 restart: unless-stopped
 ```
+
+> **Note**: The `docker-compose.yml` in the repo is NOT used by deploy.sh. The real compose file is `/Users/server/mediastack/docker-compose.yaml` on the server.
 
 DB is volume-mounted — **survives container rebuilds**.
 

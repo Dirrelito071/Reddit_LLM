@@ -40,10 +40,12 @@ Full log saved to `/tmp/reddit-llm-deploy.log` on the local machine.
 
 ### Volume mounts (data persists across rebuilds)
 ```
-/Users/server/mediastack/Reddit_LLM/reddit_posts.db  →  /app/reddit_posts.db
-/Users/server/mediastack/Reddit_LLM/data             →  /app/data
-/Users/server/mediastack/Reddit_LLM/logs             →  /app/logs
+/Volumes/RED - Backup OLD stuff/mediastack-data/reddit-llm/reddit_posts.db  →  /app/reddit_posts.db
+/Volumes/RED - Backup OLD stuff/mediastack-data/reddit-llm/data             →  /app/data
+/Volumes/RED - Backup OLD stuff/mediastack-data/reddit-llm/logs             →  /app/logs
 ```
+
+> The real compose file controlling these mounts is `/Users/server/mediastack/docker-compose.yaml` on the server. The `docker-compose.yml` in the repo is not used by deploy.sh.
 
 ---
 
@@ -64,18 +66,21 @@ ssh Server@server "/usr/local/bin/docker logs -f reddit-news-server 2>&1"
 
 ## Accessing the DB from local machine
 
-```bash
-# Copy DB from server
-scp Server@server:/Users/server/mediastack/Reddit_LLM/reddit_posts.db \
-    /Users/kvirre/Documents/Martin/Programmering/Reddit_LLM/reddit_posts.db
+The DB is on the RED external drive, shared via SMB. It is mounted locally at:
+```
+/Volumes/RED - Backup OLD stuff/mediastack-data/reddit-llm/
+```
 
-# Open interactive SQLite shell
-sqlite3 /Users/kvirre/Documents/Martin/Programmering/Reddit_LLM/reddit_posts.db
+```bash
+# Open interactive SQLite shell (direct — no copy needed)
+sqlite3 "/Volumes/RED - Backup OLD stuff/mediastack-data/reddit-llm/reddit_posts.db"
 
 # Quick counts
-sqlite3 /Users/kvirre/Documents/Martin/Programmering/Reddit_LLM/reddit_posts.db \
+sqlite3 "/Volumes/RED - Backup OLD stuff/mediastack-data/reddit-llm/reddit_posts.db" \
     "SELECT subreddit, COUNT(*) FROM posts GROUP BY subreddit;"
 ```
+
+> Do NOT use scp to copy the DB — query the SMB mount directly.
 
 ---
 

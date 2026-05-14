@@ -30,13 +30,15 @@ sh logs.sh                  # last 300 lines from container
 
 ---
 
-## Copy DB from server for local inspection
+## Query the DB
+
+The DB is on the RED external drive, accessible via SMB mount at:
+```
+/Volumes/RED - Backup OLD stuff/mediastack-data/reddit-llm/reddit_posts.db
+```
 
 ```bash
-scp Server@server:/Users/server/mediastack/Reddit_LLM/reddit_posts.db \
-    /Users/kvirre/Documents/Martin/Programmering/Reddit_LLM/reddit_posts.db
-
-sqlite3 /Users/kvirre/Documents/Martin/Programmering/Reddit_LLM/reddit_posts.db \
+sqlite3 "/Volumes/RED - Backup OLD stuff/mediastack-data/reddit-llm/reddit_posts.db" \
     "SELECT subreddit, COUNT(*) FROM posts GROUP BY subreddit;"
 ```
 
