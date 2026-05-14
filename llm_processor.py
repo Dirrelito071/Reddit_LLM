@@ -80,10 +80,12 @@ def call_ollama(question, api_data):
         context_json = json.dumps(api_data, indent=2)
         full_prompt = f"Reddit API JSON data:\n\n{context_json}\n\nQUESTION: {question}"
         
+        import db
+        model_name = db.get_llm_model()
         response = requests.post(
             config.OLLAMA_URL,
             json={
-                "model": config.MODEL,
+                "model": model_name,
                 "prompt": full_prompt,
                 "temperature": config.LLM_TEMPERATURE,
                 "stream": False,
