@@ -172,8 +172,8 @@ class NewsHandler(BaseHTTPRequestHandler):
         """Return a list of available LLM models from Ollama HTTP API on MacBook"""
         import requests
         ollama_url = getattr(config, "OLLAMA_URL", "http://host.docker.internal:11434/completion")
-        # Build base URL and use llama-server's OpenAI-compatible models endpoint
-        base_url = ollama_url.replace("/completion", "")
+        # Build base URL robustly: strip /completion or /v1/chat/completions if present
+        base_url = ollama_url.replace("/completion", "").replace("/v1/chat/completions", "")
         tags_url = base_url.rstrip("/") + "/v1/models"
         try:
             resp = requests.get(tags_url, timeout=5)
