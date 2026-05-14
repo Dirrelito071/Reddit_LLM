@@ -9,6 +9,19 @@ import config
 
 DB_PATH = "reddit_posts.db"
 
+_ctx_size_cache = None
+
+def _get_ctx_size():
+    global _ctx_size_cache
+    if _ctx_size_cache is None:
+        try:
+            base = config.OLLAMA_URL.replace("/completion", "")
+            r = requests.get(f"{base}/props", timeout=5)
+            _ctx_size_cache = r.json().get("n_ctx", 16896)
+        except Exception:
+            _ctx_size_cache = 16896  # fallback
+    return _ctx_size_cache
+
 # The question to ask about each post (default, can be overridden)
 QUESTION = """What are the key insights from this post, the poster's intention, and the following discussion? Summarize it in 5 sentences."""
 
@@ -43,7 +56,11 @@ def call_ollama(question, api_data):
     """
     try:
         # Format JSON for LLM with question
+        # Reserve ~2000 tokens for question + response, use the rest of the context window
         context_json = json.dumps(api_data, indent=2)
+        max_chars = (_get_ctx_size() - 2000) * 4
+        if len(context_json) > max_chars:
+            context_json = context_json[:max_chars] + "\n... [truncated]"
         full_prompt = f"Reddit API JSON data:\n\n{context_json}\n\nQUESTION: {question}"
         
         response = requests.post(
