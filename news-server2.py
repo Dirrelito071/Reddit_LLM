@@ -179,7 +179,16 @@ class NewsHandler(BaseHTTPRequestHandler):
             resp = requests.get(tags_url, timeout=5)
             resp.raise_for_status()
             data = resp.json()
-            models = [m["id"] for m in data.get("data", []) if "id" in m]
+            models = []
+            for m in data.get("data", []):
+                if "id" in m:
+                    # Normalize: strip .gguf or .bin extensions for frontend compatibility
+                    model_id = m["id"]
+                    if model_id.endswith(".gguf"):
+                        model_id = model_id[:-5]
+                    elif model_id.endswith(".bin"):
+                        model_id = model_id[:-4]
+                    models.append(model_id)
             self.send_json({"models": models})
         except Exception as e:
             logger.error(f"Error listing models from Ollama API: {e}")
