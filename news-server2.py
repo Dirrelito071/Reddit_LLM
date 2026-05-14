@@ -180,10 +180,10 @@ class NewsHandler(BaseHTTPRequestHandler):
             resp.raise_for_status()
             data = resp.json()
             models = []
-            for m in data.get("data", []):
-                if "id" in m:
+            for m in data.get("models", []):
+                model_id = m.get("name") or m.get("model")
+                if model_id:
                     # Normalize: strip .gguf or .bin extensions for frontend compatibility
-                    model_id = m["id"]
                     if model_id.endswith(".gguf"):
                         model_id = model_id[:-5]
                     elif model_id.endswith(".bin"):
