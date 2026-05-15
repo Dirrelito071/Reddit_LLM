@@ -95,7 +95,8 @@ def call_ollama(question, api_data):
         response.raise_for_status()
         
         result = response.json()
-        return result.get('response', '')
+        # Support both 'response' and 'content' fields for compatibility
+        return result.get('response') or result.get('content') or ''
     except Exception as e:
         print(f"Error calling Ollama: {e}")
         return None
@@ -155,12 +156,11 @@ def process_post(post_id, custom_question=None):
         # Call LLM
         print(f"  Calling LLM for: {title[:60]}...")
         summary = call_ollama(question_to_use, context)
-        
         if not summary:
+            # Do not update status if summary failed
             conn.close()
             return False
-        
-        # Update DB with local time for updated_at
+        # Update DB with local time for updated_at and set status to 'summarized'
         import datetime, time
         now_local = datetime.datetime.fromtimestamp(time.time()).isoformat(sep=' ', timespec='seconds')
         cursor.execute("""
@@ -170,7 +170,6 @@ def process_post(post_id, custom_question=None):
         """, (summary, now_local, post_id))
         conn.commit()
         conn.close()
-        
         return True
         
     except Exception as e:

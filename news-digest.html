@@ -399,7 +399,6 @@ html, body {
     <div class="settings-tabs">
       <button class="settings-tab active" data-tab="subreddits">Subreddits</button>
       <button class="settings-tab" data-tab="llm">LLM Question</button>
-      <button class="settings-tab" data-tab="model">Model</button>
       <button class="settings-tab" data-tab="pipeline">Pipeline</button>
     </div>
     
@@ -429,14 +428,7 @@ html, body {
         <p class="info-text">This question will be asked to the LLM for summarizing posts</p>
       </div>
     </div>
-    <!-- Model Tab -->
-    <div id="tab-model" class="settings-content">
-      <div class="form-group">
-        <label class="form-label">Model (Ollama):</label>
-        <select id="llm-model" class="form-input"></select>
-        <p class="info-text">Choose which LLM model to use for summarization. Only models available in Ollama are shown.</p>
-      </div>
-    </div>
+    <!-- Model Tab removed -->
     <!-- Pipeline Tab -->
     <div id="tab-pipeline" class="settings-content">
       <div class="form-group">
@@ -1292,7 +1284,7 @@ html, body {
   const subredditInput = document.getElementById('subreddit-input');
   const subredditAddBtn = document.getElementById('subreddit-add-btn');
   const llmQuestion = document.getElementById('llm-question');
-  const llmModelSelect = document.getElementById('llm-model');
+  // Model selection removed
 
   // Modal open/close functions
   function openSettings() {
@@ -1332,12 +1324,8 @@ html, body {
   // Load current settings from backend
   async function loadCurrentSettings() {
     try {
-      const [statusResp, modelsResp] = await Promise.all([
-        fetch('/api/status'),
-        fetch('/api/models')
-      ]);
+      const statusResp = await fetch('/api/status');
       const data = await statusResp.json();
-      const modelsData = await modelsResp.json();
 
       // Load subreddits
       const subreddits = data.subreddits || [];
@@ -1354,26 +1342,7 @@ html, body {
         Array.from(purgeDaysSelect.options).forEach(o => { o.selected = o.value === purgeVal; });
       }
 
-      // Load models
-      llmModelSelect.innerHTML = '';
-      const models = (modelsData.models || []);
-      const currentModel = data.llm_model || '';
-      if (models.length === 0) {
-        const opt = document.createElement('option');
-        opt.value = '';
-        opt.textContent = 'No models found';
-        llmModelSelect.appendChild(opt);
-        llmModelSelect.disabled = true;
-      } else {
-        models.forEach(m => {
-          const opt = document.createElement('option');
-          opt.value = m;
-          opt.textContent = m;
-          if (m === currentModel) opt.selected = true;
-          llmModelSelect.appendChild(opt);
-        });
-        llmModelSelect.disabled = false;
-      }
+      // Model selection removed
       clearSettingsError();
     } catch (error) {
       console.error('Error loading settings:', error);
@@ -1484,14 +1453,6 @@ html, body {
         return;
       }
 
-      // Get selected model
-      const selectedModel = llmModelSelect ? llmModelSelect.value : '';
-      if (!selectedModel) {
-        showSettingsError('Please select a model');
-        settingsSave.disabled = false;
-        settingsSave.textContent = 'Save Settings';
-        return;
-      }
 
       // Save subreddits
       const subResponse = await fetch('/api/settings/subreddits', {
@@ -1517,16 +1478,7 @@ html, body {
         throw new Error(error.error || 'Failed to save question');
       }
 
-      // Save model
-      const mResponse = await fetch('/api/settings/model', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: selectedModel })
-      });
-      if (!mResponse.ok) {
-        const error = await mResponse.json();
-        throw new Error(error.error || 'Failed to save model');
-      }
+      // Model selection removed
 
       // Save purge days
       const purgeDaysEl = document.getElementById('purge-days');

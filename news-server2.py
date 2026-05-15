@@ -127,8 +127,7 @@ class NewsHandler(BaseHTTPRequestHandler):
             self.serve_status()
         elif path == "/api/news":
             self.serve_news()
-        elif path == "/api/models":
-            self.serve_models()
+        # Model listing endpoint removed
         else:
             self.send_error(404)
     
@@ -168,31 +167,6 @@ class NewsHandler(BaseHTTPRequestHandler):
             logger.error(f"Error handling refresh subreddit: {e}")
             self.send_json({"error": str(e)})
 
-    def serve_models(self):
-        """Return a list of available LLM models from Ollama HTTP API on MacBook"""
-        import requests
-        ollama_url = getattr(config, "OLLAMA_URL", "http://host.docker.internal:11434/completion")
-        # Build base URL robustly: strip /completion or /v1/chat/completions if present
-        base_url = ollama_url.replace("/completion", "").replace("/v1/chat/completions", "")
-        tags_url = base_url.rstrip("/") + "/v1/models"
-        try:
-            resp = requests.get(tags_url, timeout=5)
-            resp.raise_for_status()
-            data = resp.json()
-            models = []
-            for m in data.get("models", []):
-                model_id = m.get("name") or m.get("model")
-                if model_id:
-                    # Normalize: strip .gguf or .bin extensions for frontend compatibility
-                    if model_id.endswith(".gguf"):
-                        model_id = model_id[:-5]
-                    elif model_id.endswith(".bin"):
-                        model_id = model_id[:-4]
-                    models.append(model_id)
-            self.send_json({"models": models})
-        except Exception as e:
-            logger.error(f"Error listing models from Ollama API: {e}")
-            self.send_json({"models": [], "error": str(e)})
 
     def handle_model_settings(self):
         """Handle POST /api/settings/model - update selected LLM model"""
