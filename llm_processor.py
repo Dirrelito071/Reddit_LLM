@@ -79,14 +79,17 @@ def call_ollama(question, api_data):
         # Format JSON for LLM with question
         context_json = json.dumps(api_data, indent=2)
         full_prompt = f"Reddit API JSON data:\n\n{context_json}\n\nQUESTION: {question}"
-        
+
         import db
         model_name = db.get_llm_model()
         response = requests.post(
             config.OLLAMA_URL,
             json={
                 "model": model_name,
-                "prompt": full_prompt,
+                "messages": [
+                    {"role": "system", "content": "You are a helpful assistant. Respond briefly."},
+                    {"role": "user", "content": full_prompt}
+                ],
                 "temperature": config.LLM_TEMPERATURE,
                 "stream": False,
                 "n_predict": 100,
@@ -94,10 +97,10 @@ def call_ollama(question, api_data):
             timeout=config.LLM_TIMEOUT
         )
         response.raise_for_status()
-        
+
         result = response.json()
-        # Support both 'response' and 'content' fields for compatibility
-        return result.get('response') or result.get('content') or ''
+        # Extract answer from chat response format
+        return result["choices"][0]["message"]["content"]
     except Exception as e:
         print(f"Error calling Ollama: {e}")
         return None
