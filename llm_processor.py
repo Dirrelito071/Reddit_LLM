@@ -99,8 +99,14 @@ def call_ollama(question, api_data):
         response.raise_for_status()
 
         result = response.json()
-        # Extract answer from chat response format
-        return result["choices"][0]["message"]["content"]
+        # Debug: print full response if extraction fails
+        try:
+            return result["choices"][0]["message"]["content"]
+        except Exception as ex:
+            print("[LLM DEBUG] Full API response:")
+            print(json.dumps(result, indent=2))
+            print(f"[LLM DEBUG] Extraction error: {ex}")
+            return None
     except Exception as e:
         print(f"Error calling Ollama: {e}")
         return None
