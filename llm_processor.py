@@ -91,8 +91,7 @@ def call_ollama(question, api_data):
                     {"role": "user", "content": full_prompt}
                 ],
                 "temperature": config.LLM_TEMPERATURE,
-                "stream": False,
-                "n_predict": 100,
+                "stream": False
             },
             timeout=config.LLM_TIMEOUT
         )
