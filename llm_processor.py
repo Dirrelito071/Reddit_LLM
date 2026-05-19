@@ -103,9 +103,9 @@ def call_ollama(question, api_data):
         try:
             return result["choices"][0]["message"]["content"]
         except Exception as ex:
-            print("[LLM DEBUG] Full API response:")
-            print(json.dumps(result, indent=2))
-            print(f"[LLM DEBUG] Extraction error: {ex}")
+            print("[LLM DEBUG] Full API response:", flush=True)
+            print(json.dumps(result, indent=2), flush=True)
+            print(f"[LLM DEBUG] Extraction error: {ex}", flush=True)
             return None
     except Exception as e:
         print(f"Error calling Ollama: {e}")
