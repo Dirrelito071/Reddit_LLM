@@ -503,7 +503,12 @@ if __name__ == "__main__":
     logger.info("NEWS DIGEST SERVER - Reddit Edition with Pipeline Orchestration")
     logger.info("=" * 80)
     logger.info(f"Starting server on http://localhost:{PORT}")
-    logger.info(f"Subreddits: {', '.join(config.SUBREDDITS)}")
+    try:
+        subreddits = db.get_subreddits()
+        logger.info(f"Subreddits (from DB): {', '.join(subreddits)}")
+    except Exception as e:
+        logger.error(f"Error loading subreddits from DB: {e}")
+        logger.info(f"Falling back to config: {', '.join(config.SUBREDDITS)}")
     logger.info("\nOpen your browser and navigate to:")
     logger.info(f"  http://localhost:{PORT}")
     logger.info("\nClick 'Start Pipeline' button to begin collection and summarization")

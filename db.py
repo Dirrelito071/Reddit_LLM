@@ -501,12 +501,10 @@ def get_subreddits():
             return json.loads(stored)
         except Exception as e:
             logger.error(f"Error parsing subreddits from DB: {e}")
-    
-    # Seed from config on first read if not in DB
-    default_subs = json.dumps(config.SUBREDDITS)
-    set_setting("subreddits", default_subs)
-    logger.info(f"Seeded subreddits from config: {config.SUBREDDITS}")
-    return list(config.SUBREDDITS)
+            raise RuntimeError(f"Invalid subreddits value in DB: {e}")
+    else:
+        logger.error("No subreddits found in DB. Please set subreddits in the database.")
+        raise RuntimeError("No subreddits found in DB.")
 
 
 def set_subreddits(subreddit_list):
