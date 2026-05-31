@@ -500,7 +500,13 @@ if __name__ == "__main__":
     threading.Thread(target=scheduler_loop, daemon=True).start()
 
     logger.info("=" * 80)
-    logger.info("NEWS DIGEST SERVER - Reddit Edition with Pipeline Orchestration")
+    # Version info for traceability
+    import subprocess
+    try:
+        version = subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD']).decode('utf-8').strip()
+    except Exception:
+        version = 'unknown'
+    logger.info(f"NEWS DIGEST SERVER - Reddit Edition with Pipeline Orchestration (version: {version})")
     logger.info("=" * 80)
     logger.info(f"Starting server on http://localhost:{PORT}")
     try:
