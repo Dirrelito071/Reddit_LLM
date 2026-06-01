@@ -181,10 +181,15 @@ def replace_posts(subreddit, posts):
     posts: list of (post_id, post_data_dict, stripped_json_dict)
     Every post is inserted with status='new' so summarize.py picks them all up.
     """
+    # Deduplicate by post_id — Reddit hot feed can return the same post twice
+    # (stickied posts appear at position 0 AND again in the ranked list)
+    seen = set()
+    unique_posts = [p for p in posts if not (p[0] in seen or seen.add(p[0]))]
+
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("DELETE FROM posts WHERE subreddit = ?", (subreddit,))
-    for post_id, post_data, json_payload in posts:
+    for post_id, post_data, json_payload in unique_posts:
         cursor.execute("""
             INSERT INTO posts
                 (post_id, subreddit, title, author, score, upvote_ratio,
