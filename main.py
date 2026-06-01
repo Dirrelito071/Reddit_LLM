@@ -35,14 +35,19 @@ def collect_subreddit(page, subreddit):
     limit = config.POSTS_PER_SUBREDDIT
 
     # Load the subreddit page first to establish session cookies.
-    # Use networkidle to wait for any JS-triggered redirects (e.g. NSFW age gates)
-    # to fully settle before calling page.evaluate(); otherwise the execution
-    # context is destroyed mid-navigation.
+    # Use domcontentloaded for the initial goto, then wait briefly for networkidle
+    # to catch any JS-triggered redirects (e.g. NSFW age gates). Reddit's SPA
+    # keeps background polling so networkidle never permanently settles — we allow
+    # it to timeout after 8s and proceed anyway.
     page.goto(
         f"https://www.reddit.com/r/{subreddit}/hot/",
-        wait_until="networkidle",
+        wait_until="domcontentloaded",
         timeout=30000,
     )
+    try:
+        page.wait_for_load_state("networkidle", timeout=8000)
+    except Exception:
+        pass  # Reddit keeps polling — proceed after timeout
 
     hot_url = config.REDDIT_HOT_URL.format(subreddit=subreddit, limit=limit)
     hot_data = browser_fetch_json(page, hot_url)
