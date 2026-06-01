@@ -34,12 +34,15 @@ def collect_subreddit(page, subreddit):
     """
     limit = config.POSTS_PER_SUBREDDIT
 
-    # Load the subreddit page first to establish session cookies
+    # Load the subreddit page first to establish session cookies.
+    # Use networkidle to wait for any JS-triggered redirects (e.g. NSFW age gates)
+    # to fully settle before calling page.evaluate(); otherwise the execution
+    # context is destroyed mid-navigation.
     page.goto(
         f"https://www.reddit.com/r/{subreddit}/hot/",
-        wait_until="domcontentloaded",
+        wait_until="networkidle",
+        timeout=30000,
     )
-    time.sleep(2)
 
     hot_url = config.REDDIT_HOT_URL.format(subreddit=subreddit, limit=limit)
     hot_data = browser_fetch_json(page, hot_url)
